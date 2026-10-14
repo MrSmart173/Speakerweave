@@ -51,7 +51,9 @@ class _Plan:
 
 
 SURROUND_HOLD_S = 3.0      # surround channels silent this long: treat the sound as stereo
-PAIR_HOLD_S = 1.0          # stereo means both fronts playing: within this long of each other
+PAIR_HOLD_S = 1.0          # stereo music keeps filling every speaker this long after both fronts played
+PAIR_MIN_S = 0.1           # both fronts playing together this long before it counts as stereo
+PAIR_LEVEL = 0.03          # together: the quieter front within 30 dB of the louder one
 METRONOME_LEAD_S = 0.08    # the first click comes this long after the metronome is switched on
 QUIET = 1e-4
 
@@ -80,7 +82,8 @@ class Engine:
         self.extra_peaks: dict = {}       # {source id: peak of each channel}, for the meters
         self.surround_now = False         # the source is carrying more than stereo right now
         self._surround_until = 0
-        self._left_until = self._right_until = 0
+        self._pair_until = 0
+        self._together = 0                # how long both fronts have been playing together
         self._samples = 0
         self._last_matrix = None
         self.layout_override = ""      # set by the built in test signal
@@ -331,16 +334,20 @@ class Engine:
             if plan.extra_channels and float(np.max(peaks[list(plan.extra_channels)])) > QUIET:
                 self._surround_until = self._samples + int(SURROUND_HOLD_S * self.sr)
             self.surround_now = self._samples < self._surround_until
-            # Stereo music has both fronts playing. One front alone (a channel test, a
-            # game's sound coming from the left) stays on its own speakers.
+            # Stereo music has both fronts playing at the same time. One front alone (a
+            # channel test, a game's sound coming from the left) stays on its own speakers,
+            # also straight after the other front: a channel test going from front left to
+            # front right, or the fading tail of the last sound, is not stereo music.
             left, right = plan.front_pair
-            hold = int(PAIR_HOLD_S * self.sr)
-            if float(peaks[left]) > QUIET:
-                self._left_until = self._samples + hold
-            if float(peaks[right]) > QUIET:
-                self._right_until = self._samples + hold
-            pair = self._samples < self._left_until and self._samples < self._right_until
-            if not self.surround_now and pair:
+            loud = max(float(peaks[left]), float(peaks[right]))
+            soft = min(float(peaks[left]), float(peaks[right]))
+            if soft > QUIET and soft > loud * PAIR_LEVEL:
+                self._together += n
+                if self._together >= int(PAIR_MIN_S * self.sr):
+                    self._pair_until = self._samples + int(PAIR_HOLD_S * self.sr)
+            elif self._samples >= self._pair_until:
+                self._together = 0
+            if not self.surround_now and self._samples < self._pair_until:
                 matrix = plan.stereo_matrix
         else:
             self.surround_now = len(self.source_roles) > 2

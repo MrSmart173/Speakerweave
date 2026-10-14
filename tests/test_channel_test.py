@@ -74,3 +74,44 @@ def test_stereo_music_is_still_spread_over_every_speaker():
     eng.rebuild()
     out = play(eng, ["FL", "FR"], seconds=2.0)
     assert loud(out, devs) == {"laptop FL", "dell FL", "dell FR", "vg FR"}
+
+
+def play_blocks(eng, make, seconds):
+    """make(t) -> {source channel name: signal at times t}. Returns the output of every block."""
+    n = 480
+    outs = []
+    for b in range(int(seconds * SR / n)):
+        t = (np.arange(n) + b * n) / SR
+        block = np.zeros((n, 8), dtype=np.float32)
+        for name, wave in make(t).items():
+            block[:, SEVEN_ONE.index(name)] = wave
+        outs.append(eng.process(block))
+    return outs
+
+
+def test_front_right_straight_after_front_left_stays_on_its_own_speakers():
+    """A channel test going round the room: front left, then front right at once. Front
+    right must not fill the centre and side speakers for a moment, as stereo would."""
+    p, eng, devs = elis_room()
+    tone = lambda t: 0.3 * np.sin(2 * np.pi * 440 * t)
+    play_blocks(eng, lambda t: {"FL": tone(t)}, 1.0)
+    for out in play_blocks(eng, lambda t: {"FR": tone(t)}, 1.5):
+        assert loud(out, devs) == {"dell FR", "vg FR"}
+
+
+def test_the_fading_tail_of_front_left_does_not_count_as_stereo():
+    p, eng, devs = elis_room()
+    tone = lambda t: 0.3 * np.sin(2 * np.pi * 440 * t)
+    play_blocks(eng, lambda t: {"FL": tone(t)}, 1.0)
+    start = 1.0
+    fade = lambda t: tone(t) * 0.01 * np.exp(-(t - start) / 0.1)     # -40 dB and falling
+    outs = play_blocks(eng, lambda t: {"FL": fade(t + start), "FR": tone(t)}, 1.0)
+    for out in outs:
+        assert "vg SR" not in loud(out, devs) and "laptop SL" not in loud(out, devs)
+
+
+def test_stereo_music_fills_every_speaker_within_a_moment():
+    p, eng, devs = elis_room()
+    tone = lambda t: 0.3 * np.sin(2 * np.pi * 440 * t)
+    outs = play_blocks(eng, lambda t: {"FL": tone(t), "FR": tone(t)}, 0.5)
+    assert loud(outs[-1], devs) == {"laptop SL", "laptop FL", "dell FL", "dell FR", "vg FR", "vg SR"}

@@ -218,7 +218,8 @@ def channel_count(device_id: str) -> int:
 
 def layout(device_id: str) -> dict:
     """What Windows has for an output: {"channels", "mix_mask"} of the format it mixes in, and
-    "speakers", the speaker layout the Sound control panel shows (0 when the device has none)."""
+    "speakers", the speaker layout the Sound control panel shows (0 when the device has none).
+    Also "mix_format" and "device_format", every field of both formats, when Windows gives them."""
     out = {"channels": 0, "mix_mask": 0, "speakers": 0}
     if not supported():
         return out
@@ -230,8 +231,19 @@ def layout(device_id: str) -> dict:
             try:
                 fmt = _read_format(mix.value)
                 out["channels"], out["mix_mask"] = fmt["channels"], fmt["mask"]
+                out["mix_format"] = fmt
             finally:
                 com.free(mix)
+            device_fmt = c_void_p()
+            try:
+                method(policy, 4, HRESULT, ctypes.c_wchar_p, ctypes.c_int, POINTER(c_void_p))(
+                    device_id, 0, byref(device_fmt))
+                try:
+                    out["device_format"] = _read_format(device_fmt.value)
+                finally:
+                    com.free(device_fmt)
+            except OSError:
+                pass
         finally:
             release(policy)
         enum = com.create(CLSID_ENUMERATOR, IID_ENUMERATOR)
