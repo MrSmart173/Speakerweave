@@ -47,6 +47,7 @@ class AppSettings:
     games_seen: list = field(default_factory=list)    # games the SimHub plugin has reported
     tour_done: bool = False             # the first run tour was finished or skipped
     update_note_seen: str = ""          # the newer version whose note was closed with Later
+    last_setup_folder: str = ""         # where a setup was last opened or saved
     metronome_bpm: int = 100
     metronome_mode: str = "together"    # together, turns or selected
     # outputs the person hid in the output list, by name: see hidden.py

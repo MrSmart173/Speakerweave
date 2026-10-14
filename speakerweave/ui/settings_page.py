@@ -2,7 +2,7 @@
 devices, the user's own test sounds, the About section and uninstalling."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QStandardPaths, Qt, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, QFileDialog,
                                QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -13,7 +13,7 @@ from ..release import version_name
 from ..settings import AppSettings
 from . import theme
 from .panels import dim, scrolled
-from .state import config_dir
+from .state import config_dir, documents_dir
 from .uninstall_dialog import start_uninstall
 
 ADOBE_COLOR = "https://color.adobe.com/create/color-wheel"
@@ -331,7 +331,7 @@ class SettingsPage(QWidget):
         self._set_custom(theme.colors_from_swatches(codes, self.light_look.currentData()))
 
     def _load_ase(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Adobe swatch file", "",
+        path, _ = QFileDialog.getOpenFileName(self, "Adobe swatch file", documents_dir(),
                                               "Adobe swatches (*.ase);;All files (*)")
         if not path:
             return
@@ -390,7 +390,8 @@ class SettingsPage(QWidget):
             remove.setEnabled(bool(entry))
 
     def _choose_sound(self, slot: int) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, f"Test sound {slot + 1}", "", sounds.FILE_FILTER)
+        music = QStandardPaths.writableLocation(QStandardPaths.MusicLocation) or documents_dir()
+        path, _ = QFileDialog.getOpenFileName(self, f"Test sound {slot + 1}", music, sounds.FILE_FILTER)
         if not path:
             return
         QApplication.setOverrideCursor(Qt.WaitCursor)

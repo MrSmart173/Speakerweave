@@ -174,9 +174,11 @@ def _read_format(pointer_value) -> dict:
     """The fields of a WAVEFORMATEX(TENSIBLE) Windows handed us."""
     base = ctypes.cast(pointer_value, POINTER(WAVEFORMATEXTENSIBLE)).contents
     fmt = {"tag": base.wFormatTag, "channels": base.nChannels, "rate": base.nSamplesPerSec,
-           "bits": base.wBitsPerSample, "valid": base.wBitsPerSample, "float": base.wFormatTag == 3}
+           "bits": base.wBitsPerSample, "valid": base.wBitsPerSample, "float": base.wFormatTag == 3,
+           "mask": 0}
     if base.wFormatTag == EXTENSIBLE and base.cbSize >= 22:
         fmt["valid"] = base.wValidBitsPerSample or base.wBitsPerSample
+        fmt["mask"] = int(base.dwChannelMask)
         sub = bytes(base.SubFormat)
         fmt["float"] = sub == bytes(guid(SUBTYPE_FLOAT))
     return fmt
@@ -214,6 +216,47 @@ def channel_count(device_id: str) -> int:
             release(policy)
 
 
+def layout(device_id: str) -> dict:
+    """What Windows has for an output: {"channels", "mix_mask"} of the format it mixes in, and
+    "speakers", the speaker layout the Sound control panel shows (0 when the device has none)."""
+    out = {"channels": 0, "mix_mask": 0, "speakers": 0}
+    if not supported():
+        return out
+    with Apartment() as com:
+        policy = com.create(CLSID_POLICY, IID_POLICY)
+        try:
+            mix = c_void_p()
+            method(policy, 3, HRESULT, ctypes.c_wchar_p, POINTER(c_void_p))(device_id, byref(mix))
+            try:
+                fmt = _read_format(mix.value)
+                out["channels"], out["mix_mask"] = fmt["channels"], fmt["mask"]
+            finally:
+                com.free(mix)
+        finally:
+            release(policy)
+        enum = com.create(CLSID_ENUMERATOR, IID_ENUMERATOR)
+        try:
+            device = c_void_p()
+            method(enum, 5, HRESULT, ctypes.c_wchar_p, POINTER(c_void_p))(device_id, byref(device))
+            try:
+                store = c_void_p()
+                method(device, 4, HRESULT, ctypes.c_uint32, POINTER(c_void_p))(0, byref(store))
+                try:
+                    key = PROPERTYKEY(guid(PHYSICAL_SPEAKERS[0]), PHYSICAL_SPEAKERS[1])
+                    value = PROPVARIANT()
+                    method(store, 5, HRESULT, POINTER(PROPERTYKEY), POINTER(PROPVARIANT))(
+                        byref(key), byref(value))
+                    if value.vt == 19 and value.value:
+                        out["speakers"] = int(value.value) & 0xFFFFFFFF
+                finally:
+                    release(store)
+            finally:
+                release(device)
+        finally:
+            release(enum)
+    return out
+
+
 def set_channels(device_id: str, channels: int = 8) -> None:
     """Sets an output to stereo (2), 5.1 (6) or 7.1 (8), like Configure in the
     Sound control panel does. Used for the virtual device SpeakerWeave listens
@@ -233,14 +276,16 @@ def set_channels(device_id: str, channels: int = 8) -> None:
             finally:
                 com.free(device_fmt)
                 com.free(mix_fmt)
-            # the speaker layout shown in the Sound control panel (not every device keeps it)
+            # the speaker layout shown in the Sound control panel (not every device keeps it).
+            # SetPropertyValue(device, bFxStore, key, value): FALSE writes the device's own
+            # properties, not those of its sound effects.
             try:
                 value = PROPVARIANT()
                 value.vt = 19                                 # VT_UI4
                 value.value = CHANNEL_MASKS.get(channels, (1 << channels) - 1)
                 key = PROPERTYKEY(guid(PHYSICAL_SPEAKERS[0]), PHYSICAL_SPEAKERS[1])
-                method(policy, 12, HRESULT, ctypes.c_wchar_p, POINTER(PROPERTYKEY),
-                       POINTER(PROPVARIANT))(device_id, byref(key), byref(value))
+                method(policy, 12, HRESULT, ctypes.c_wchar_p, ctypes.c_int, POINTER(PROPERTYKEY),
+                       POINTER(PROPVARIANT))(device_id, 0, byref(key), byref(value))
             except OSError:
                 pass
             method(policy, 6, HRESULT, ctypes.c_wchar_p, POINTER(WAVEFORMATEXTENSIBLE),

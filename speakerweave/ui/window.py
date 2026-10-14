@@ -37,6 +37,7 @@ from .extras import ExtrasPanel
 from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, UpdateNote
 from .levels import LevelsBar
 from .settings_page import SettingsPage, about_text
+from .state import remember_setup_folder, setups_dir
 from .updater import UpdateController
 
 ROLE_KEY = Qt.UserRole
@@ -824,9 +825,12 @@ class MainWindow(QMainWindow):
             self._load_top()
 
     def _open_setup(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open a setup", "", "SpeakerWeave setup (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open a setup", setups_dir(self.state.settings),
+                                              "SpeakerWeave setup (*.json)")
         if not path:
             return
+        remember_setup_folder(self.state.settings, path)
+        self.state.save_settings()
         try:
             project = Project.load(path)
         except Exception as exc:
@@ -836,10 +840,14 @@ class MainWindow(QMainWindow):
         self._load_top()
 
     def _save_setup(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save this setup", "My speakers.json",
-                                              "SpeakerWeave setup (*.json)")
+        start = os.path.join(setups_dir(self.state.settings), "My speakers.json")
+        path, _ = QFileDialog.getSaveFileName(self, "Save this setup", start, "SpeakerWeave setup (*.json)")
         if not path:
             return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        remember_setup_folder(self.state.settings, path)
+        self.state.save_settings()
         try:
             self.state.project.save(path)
             self.statusBar().showMessage(f"Saved to {path}", 5000)

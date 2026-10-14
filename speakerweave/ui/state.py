@@ -22,6 +22,31 @@ def config_dir() -> str:
     return base
 
 
+def documents_dir() -> str:
+    path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+    return path or os.path.expanduser("~")
+
+
+def setups_dir(settings=None) -> str:
+    """Where the Open and Save windows for setups start: the folder last used, else
+    "SpeakerWeave setups" in Documents. Never the folder SpeakerWeave runs from, which
+    Windows does not let it write to when it is installed under Program Files."""
+    last = getattr(settings, "last_setup_folder", "") if settings is not None else ""
+    if last and os.path.isdir(last):
+        return last
+    path = os.path.join(documents_dir(), "SpeakerWeave setups")
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        return documents_dir()
+    return path
+
+
+def remember_setup_folder(settings, path: str) -> None:
+    if path:
+        settings.last_setup_folder = os.path.dirname(os.path.abspath(path))
+
+
 class AppState(QObject):
     structureChanged = Signal()     # devices, roles, mode or routing changed
     selectionChanged = Signal()

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QFileDialog
 from ..controls import (MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, all_actions, binding_for,
                         clear_binding, set_binding)
 from .panels import dim, scrolled
+from .state import remember_setup_folder, setups_dir
 
 MODIFIER_KEYS = {Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr,
                  Qt.Key_Super_L, Qt.Key_Super_R}
@@ -361,9 +362,10 @@ class ControlsPage(QWidget):
             label.setToolTip(path)
 
     def _choose_slot(self, index: int) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, f"Setup for slot {index + 1}", "",
-                                              "SpeakerWeave setup (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, f"Setup for slot {index + 1}",
+                                              setups_dir(self.state.settings), "SpeakerWeave setup (*.json)")
         if path:
+            remember_setup_folder(self.state.settings, path)
             self._set_slot(index, path)
 
     def _set_slot(self, index: int, path: str) -> None:

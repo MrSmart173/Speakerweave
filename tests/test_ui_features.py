@@ -267,3 +267,40 @@ def test_mode_list_side_rear_and_custom_positions():
     assert win.mode.currentData() == "4.1" and win.mode.itemText(win.mode.count() - 1) == "Custom..."
     dialog.close()
     win.close()
+
+
+def test_setups_are_saved_in_documents_not_where_the_app_is_installed(monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    from speakerweave.settings import AppSettings
+    from speakerweave.ui import state as state_module
+    docs = tempfile.mkdtemp()
+    monkeypatch.setattr(state_module, "documents_dir", lambda: docs)
+    settings = AppSettings()
+    first = state_module.setups_dir(settings)
+    assert first == os.path.join(docs, "SpeakerWeave setups") and os.path.isdir(first)
+    other = tempfile.mkdtemp()
+    state_module.remember_setup_folder(settings, os.path.join(other, "Desk.json"))
+    assert state_module.setups_dir(settings) == other               # the folder used last time
+    settings.last_setup_folder = os.path.join(other, "gone")
+    assert state_module.setups_dir(settings) == first               # unless it is gone
+
+    app = QApplication.instance() or QApplication([])
+    backend._sd = lambda: FakeSoundDevice([{"name": "Speakers", "outputs": 2}])
+    state = AppState("")
+    state.settings.default_output = state.settings.start_sound = state.settings.simhub_link = False
+    state.settings.tour_done = True
+    state.settings.last_setup_folder = ""
+    win = MainWindow(state)
+    asked = []
+
+    def fake_save(parent, title, start, kinds):
+        asked.append(start)
+        return os.path.join(other, "Elis Desk test 1"), kinds
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(fake_save))
+    win._save_setup()
+    assert asked[0] == os.path.join(first, "My speakers.json")
+    assert os.path.isfile(os.path.join(other, "Elis Desk test 1.json"))     # .json added
+    assert state.settings.last_setup_folder == other
+    win._quitting = True
+    win.close()
+    app.processEvents()
