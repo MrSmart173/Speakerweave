@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
                                QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPushButton, QVBoxLayout, QWidget)
 
-from .. import __version__, autostart, sounds, updates, windefault
+from .. import autostart, sounds, updates, windefault
+from ..release import version_name
 from ..settings import AppSettings
 from . import theme
 from .panels import dim, scrolled
@@ -19,7 +20,7 @@ ADOBE_COLOR = "https://color.adobe.com/create/color-wheel"
 
 
 def about_text() -> str:
-    return (f"SpeakerWeave {__version__}\n\n"
+    return (f"SpeakerWeave {version_name()}\n\n"
             f"Written by Eli Smart, just as a fun project, because I really wanted to play music "
             f"through lots of speaker outputs at once.\n\n"
             f"One sound source in, many sound outputs out, arranged as one surround system.\n\n"
@@ -143,7 +144,7 @@ class SettingsPage(QWidget):
         self.updates_box = QCheckBox("Look for a newer version when SpeakerWeave opens")
         v.addWidget(self.updates_box)
         row = QHBoxLayout()
-        self.version = QLabel(f"You have version {__version__}.")
+        self.version = QLabel(f"You have SpeakerWeave {version_name()}.")
         self.check_now = QPushButton("Check now")
         row.addWidget(self.version)
         row.addStretch(1)

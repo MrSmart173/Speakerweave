@@ -60,7 +60,8 @@ shape its sound.
 
 ## Installing (Windows 10 or 11)
 
-**With the installer.** Run `SpeakerWeave-Setup-<version>.exe`, choose where to install, and
+**With the installer.** Run `SpeakerWeave-Setup-Beta-v1.0.exe` (or the newest one on the
+[Releases page](https://github.com/MrSmart173/Speakerweave/releases)), choose where to install, and
 start SpeakerWeave from the Start menu. Nothing else is needed. The app looks for newer
 versions by itself when it opens and every six hours. When one is out, a note appears by the
 **Errors** button and the Errors page lists it under **Notices**, with what's new and a

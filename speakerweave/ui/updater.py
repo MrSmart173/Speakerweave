@@ -7,8 +7,8 @@ from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
-from .. import __version__, paths, updates
-from ..release import APP_NAME
+from .. import paths, updates
+from ..release import APP_NAME, version_name
 
 
 class UpdateController(QObject):
@@ -37,7 +37,7 @@ class UpdateController(QObject):
             if manual:
                 QMessageBox.information(
                     self.window, APP_NAME,
-                    f"You have version {__version__}.\n\nThis copy has no update address yet. "
+                    f"You have {version_name()}.\n\nThis copy has no update address yet. "
                     f"It is set in speakerweave/release.py before the installer is built.")
             return
         self._busy = True
@@ -61,7 +61,7 @@ class UpdateController(QObject):
         if info is None:
             if manual:
                 QMessageBox.information(self.window, APP_NAME,
-                                        f"You have the newest version ({__version__}).")
+                                        f"You have the newest version ({version_name()}).")
             return
         if manual:
             self.offer(info)
@@ -86,7 +86,7 @@ class UpdateController(QObject):
         box = QMessageBox(self.window)
         box.setWindowTitle(f"{APP_NAME} update")
         box.setIcon(QMessageBox.Information)
-        box.setText(f"Version {info.version.lstrip('vV')} is available. You have {__version__}.")
+        box.setText(f"SpeakerWeave {version_name(info.version)} is available. You have {version_name()}.")
         notes = (info.notes or "").strip()
         if notes:
             box.setInformativeText(notes if len(notes) < 900 else notes[:900].rstrip() + " ...")

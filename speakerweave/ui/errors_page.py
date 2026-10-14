@@ -13,7 +13,8 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
                                QWidget)
 
-from .. import __version__, paths, soundcheck, windefault
+from .. import paths, soundcheck, windefault
+from ..release import version_name
 from . import theme
 from .panels import dim, scrolled
 
@@ -179,7 +180,7 @@ class ErrorsPage(QWidget):
         info = getattr(updater, "info", None)
         if info is None:
             return
-        version = info.version.lstrip("vV")
+        version = version_name(info.version)
         notes = " ".join((info.notes or "").split())
         if len(notes) > 280:
             notes = notes[:280].rsplit(" ", 1)[0] + " ..."
@@ -191,7 +192,7 @@ class ErrorsPage(QWidget):
             fix = "Open the download page and run the new installer."
             action = "update_page"
         report.add("notice", f"SpeakerWeave {version} is available",
-                   f"You have version {__version__}." + (f" What's new: {notes}" if notes else ""),
+                   f"You have {version_name()}." + (f" What's new: {notes}" if notes else ""),
                    fix, action=action, area="update")
 
     def _simhub_findings(self, report) -> None:

@@ -4,6 +4,13 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+; how the version is shown, for example "Beta v1.0" (see STAGE in speakerweave/release.py)
+#ifndef AppVersionName
+  #define AppVersionName AppVersion
+#endif
+#ifndef SetupName
+  #define SetupName "SpeakerWeave-Setup-" + AppVersion
+#endif
 #ifndef Publisher
   #define Publisher "SpeakerWeave"
 #endif
@@ -23,7 +30,7 @@
 AppId={{EDB9FFFE-5B25-4100-AC8F-3D212E27D4EA}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppVerName={#AppName} {#AppVersion}
+AppVerName={#AppName} {#AppVersionName}
 AppPublisher={#Publisher}
 #if Website != ""
 AppPublisherURL={#Website}
@@ -58,7 +65,7 @@ RestartApplications=no
 LicenseFile={#LicenseFile}
 #endif
 OutputDir={#DistDir}\installer
-OutputBaseFilename=SpeakerWeave-Setup-{#AppVersion}
+OutputBaseFilename={#SetupName}
 SetupIconFile=SpeakerWeave.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}

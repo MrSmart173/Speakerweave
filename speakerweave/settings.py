@@ -68,7 +68,7 @@ class AppSettings:
         names = {f.name for f in fields(AppSettings)}
         settings = AppSettings(**{k: v for k, v in data.items() if k in names})
         if int(data.get("version", 1) or 1) < 2:
-            # from 1.5 on, the sound simply runs while SpeakerWeave is open
+            # from settings version 2 on, the sound simply runs while SpeakerWeave is open
             settings.start_sound = True
         settings.version = SETTINGS_VERSION
         if not isinstance(settings.bindings, list):

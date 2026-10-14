@@ -121,7 +121,8 @@ def selftest(report_path: str) -> int:
         from .ui.state import AppState
         from .ui.window import MainWindow
 
-        lines.append(f"SpeakerWeave {__version__}, Python {sys.version.split()[0]}, "
+        from .release import version_name
+        lines.append(f"SpeakerWeave {version_name()} ({__version__}), Python {sys.version.split()[0]}, "
                      f"numpy {numpy.__version__}, scipy {scipy.__version__}, Qt {qt_version}, "
                      f"sounddevice {sounddevice.__version__}")
         from . import lights

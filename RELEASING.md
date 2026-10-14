@@ -25,7 +25,8 @@ Double click **Build installer.bat**. It does everything in one go:
 2. starts the finished .exe once in a hidden self test, and stops if anything is missing
 3. wraps it into an installer with Inno Setup. The first time it offers to install
    Inno Setup for you (it is free)
-4. writes the result to `dist\installer\SpeakerWeave-Setup-<version>.exe` together with a
+4. writes the result to `dist\installer\SpeakerWeave-Setup-Beta-v1.0.exe` (named after the
+   version, see below) together with a
    `.sha256` checksum file
 
 The temporary build files go to `%LOCALAPPDATA%\SpeakerWeaveBuild`, outside this folder,
@@ -56,16 +57,24 @@ Releases page of a GitHub project:
 2. Put the name into `speakerweave/release.py`: `UPDATE_REPO = "yourname/speakerweave"`
 3. Build the installer.
 4. On GitHub open the repository, **Releases**, **Draft a new release**. As the tag type
-   `v` plus the version, for example `v1.1.0`. Write what changed in the description (the
-   app shows this text to users). Attach `SpeakerWeave-Setup-1.1.0.exe`. Publish.
+   `v` plus the version number, for example `v1.0.0`, and as the title the version name,
+   for example `SpeakerWeave Beta v1.0`. Write what changed in the description (the app
+   shows this text to users). Attach the installer and its `.sha256` file. Publish.
+
+Version numbers and names: the number lives in `speakerweave/__init__.py` (`1.0.0`) and is
+what the update check compares, so tags always use it. People see the name made from it:
+`STAGE` in `speakerweave/release.py` puts "Beta" in front, so `1.0.0` shows as "Beta v1.0"
+in the window title, the About box, the installer and its file name. Set `STAGE = ""` when
+SpeakerWeave leaves beta.
 
 For every later version:
 
-1. Raise the number in `speakerweave/__init__.py` (for example `1.1.0` to `1.2.0`).
+1. Raise the number in `speakerweave/__init__.py` (for example `1.0.0` to `1.1.0`).
 2. Run **Build installer.bat**.
-3. Publish a new GitHub release with the tag `v1.2.0` and the new installer attached.
+3. Publish a new GitHub release with the tag `v1.1.0`, the title `SpeakerWeave Beta v1.1` and
+   the new installer attached.
 
-Every installed copy then offers "Version 1.2.0 is available", downloads the installer,
+Every installed copy then shows "SpeakerWeave Beta v1.1 is available", downloads the installer,
 checks it against the checksum when GitHub lists one for the file, installs it over the old
 version and starts again. A copy run from source (SpeakerWeave.bat) only offers a link to
 the download page.

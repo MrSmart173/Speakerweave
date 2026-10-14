@@ -5,7 +5,8 @@ Steps:
   1. PyInstaller turns the Python code into dist/SpeakerWeave/SpeakerWeave.exe
   2. the finished .exe is started once in self test mode to prove it is complete
   3. (optional) the .exe is signed with your code signing certificate
-  4. Inno Setup wraps it into dist/installer/SpeakerWeave-Setup-<version>.exe
+  4. Inno Setup wraps it into dist/installer/SpeakerWeave-Setup-<version name>.exe
+     (for example SpeakerWeave-Setup-Beta-v1.0.exe, see STAGE in speakerweave/release.py)
   5. (optional) the installer is signed, and its checksum is written next to it
 
 Optional extras are switched on in packaging/build_settings.ini (created on the
@@ -346,7 +347,10 @@ def build_installer(version: str, settings: configparser.ConfigParser, terms: st
     sys.path.insert(0, ROOT)
     from speakerweave import release
 
-    args = [iscc, f"/DAppVersion={version}", f"/DPublisher={release.PUBLISHER}", f"/DDistDir={DIST}",
+    shown = release.version_name(version)                       # "Beta v1.0"
+    args = [iscc, f"/DAppVersion={version}", f"/DAppVersionName={shown}",
+            f"/DSetupName=SpeakerWeave-Setup-{shown.replace(' ', '-')}",
+            f"/DPublisher={release.PUBLISHER}", f"/DDistDir={DIST}",
             f"/DLicenseFile={terms}"]
     if release.WEBSITE.strip():
         args.append(f"/DWebsite={release.WEBSITE.strip()}")
@@ -359,7 +363,8 @@ def build_installer(version: str, settings: configparser.ConfigParser, terms: st
     args.append(os.path.join(HERE, "SpeakerWeave.iss"))
     if run(args, cwd=HERE) != 0:
         fail("Inno Setup reported an error (see above).")
-    installer = os.path.join(DIST, "installer", f"SpeakerWeave-Setup-{version}.exe")
+    installer = os.path.join(DIST, "installer",
+                             f"SpeakerWeave-Setup-{shown.replace(' ', '-')}.exe")
     if not os.path.exists(installer):
         fail("Inno Setup finished but the installer file is missing.")
     return installer

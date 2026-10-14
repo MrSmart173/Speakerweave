@@ -316,7 +316,7 @@ class Project:
     shaker_game_db: float = -3.0
     devices: list[Device] = field(default_factory=list)
     extra_sources: list[ExtraSource] = field(default_factory=list)
-    setup_version: int = 2      # 2: from 1.5, the safety buffer defaults to 0 ms
+    setup_version: int = 2      # 2: the safety buffer defaults to 0 ms
 
     # ---- lookups
     def mode_roles(self) -> list[str]:
@@ -524,7 +524,7 @@ def device_from_dict(d: dict) -> Device:
     d = dict(d)
     d["speakers"] = speakers
     if "free_placed" not in d:
-        d["free_placed"] = d.get("kind") == "external"     # setups from before 1.5
+        d["free_placed"] = d.get("kind") == "external"     # older setups
     return _build(Device, d)
 
 

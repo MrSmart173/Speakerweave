@@ -16,3 +16,18 @@ WEBSITE = "https://github.com/MrSmart173/Speakerweave"   # optional, shown in th
 
 UPDATE_REPO = "MrSmart173/Speakerweave"
 UPDATE_FEED = ""
+
+# Shown before the version number: "Beta v1.0". Set it to "" once SpeakerWeave leaves
+# beta. The number itself is __version__ in speakerweave/__init__.py, and every GitHub
+# release is tagged with it, for example v1.0.0, so the update check can compare them.
+STAGE = "Beta"
+
+
+def version_name(version: str = "") -> str:
+    """How a version is shown to people: "1.0.0" becomes "Beta v1.0", "1.2.1" "Beta v1.2.1"."""
+    from . import __version__
+    parts = (version or __version__).strip().lstrip("vV").split(".")
+    while len(parts) > 2 and parts[-1] == "0":
+        parts.pop()
+    short = "v" + ".".join(parts)
+    return f"{STAGE} {short}" if STAGE else short

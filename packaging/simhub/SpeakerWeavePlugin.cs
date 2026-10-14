@@ -27,8 +27,8 @@ using SimHub.Plugins;
 [assembly: AssemblyDescription("Links SimHub with SpeakerWeave")]
 [assembly: AssemblyCompany("Eli Smart")]
 [assembly: AssemblyProduct("SpeakerWeave")]
-[assembly: AssemblyVersion("1.5.0.0")]
-[assembly: AssemblyFileVersion("1.5.0.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
 
 namespace SpeakerWeave.SimHubPlugin
 {

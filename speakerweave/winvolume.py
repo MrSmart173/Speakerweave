@@ -9,6 +9,7 @@ applies them to every speaker.
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from ctypes import POINTER, byref, c_float, c_int, c_uint32, c_void_p, c_wchar_p
@@ -76,7 +77,8 @@ class VolumeFollower:
 
     @property
     def available(self) -> bool:
-        return self._open is not _open_windows or windefault.supported()
+        """Windows itself (not merely something that says it is), or a test's own opener."""
+        return self._open is not _open_windows or sys.platform == "win32"
 
     def follow(self, name: str) -> None:
         """name: the Windows name of the output device to follow, "" for none."""

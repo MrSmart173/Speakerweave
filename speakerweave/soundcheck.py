@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import __version__, backend
+from .release import version_name
 from .model import OFF, ROLE_NAMES, Project, is_sub
 
 TONE_HZ = 997.0
@@ -57,7 +58,7 @@ class Report:
         return [f for f in self.findings if f.level == "warning"]
 
     def text(self) -> str:
-        out = [f"SpeakerWeave {__version__} sound check, {time.strftime('%Y-%m-%d %H:%M:%S')}", ""]
+        out = [f"SpeakerWeave {version_name()} ({__version__}) sound check, {time.strftime('%Y-%m-%d %H:%M:%S')}", ""]
         for f in self.findings:
             out.append(f"[{f.level.upper()}] {f.title}")
             if f.detail:

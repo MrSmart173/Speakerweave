@@ -120,3 +120,18 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn()
             print("ok   ", name)
+
+
+def test_versions_are_shown_as_beta_names():
+    from speakerweave import __version__, release
+    from speakerweave.updates import is_newer
+    assert __version__ == "1.0.0"
+    assert release.version_name() == "Beta v1.0"
+    assert release.version_name("v1.2.1") == "Beta v1.2.1"
+    assert release.version_name("2.0.0") == "Beta v2.0"
+    old, release.STAGE = release.STAGE, ""
+    try:
+        assert release.version_name("1.3.0") == "v1.3"
+    finally:
+        release.STAGE = old
+    assert is_newer("v1.0.1") and not is_newer("v1.0.0")    # tags keep plain numbers

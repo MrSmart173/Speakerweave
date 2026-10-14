@@ -11,13 +11,14 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QFileDialo
                                QSpinBox, QSplitter, QStackedWidget, QSystemTrayIcon, QTabWidget,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QWidgetAction)
 
-from .. import __version__, backend, paths, speaker_library, updates, windefault
+from .. import backend, paths, speaker_library, updates, windefault
 from ..controls import actions_for_pad, key_bindings
 from ..gamepads import GamepadWatcher
 from ..model import (CUSTOM, OFF, SURROUND_SWITCHABLE, Project, ROLE_COLORS, ROLE_NAMES,
                      auto_align_delays, auto_assign_roles, face_listener, is_shape, mode_choices,
                      mode_label, standard_mode_for)
 from .. import hidden
+from ..release import version_name
 from ..remote import RemoteServer
 from .simhub_link import SimHubLink
 from .tour import Tour, window_steps
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
     def __init__(self, state):
         super().__init__()
         self.state = state
-        self.setWindowTitle(f"SpeakerWeave {__version__}")
+        self.setWindowTitle(f"SpeakerWeave {version_name()}")
         self.setWindowIcon(theme.app_icon())
         self.resize(1500, 900)
         self._tree_loading = False
@@ -745,7 +746,7 @@ class MainWindow(QMainWindow):
             return
         if getattr(self, "_update_note", None) is not None:
             return
-        note = UpdateNote(self, version, bool(info.url) and paths.is_built())
+        note = UpdateNote(self, version_name(info.version), bool(info.url) and paths.is_built())
         note.chosen.connect(lambda what, i=info: self._update_choice(i, what))
         note.place_under(self.errors_btn)
         self._update_note = note

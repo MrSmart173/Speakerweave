@@ -281,15 +281,20 @@ def test_whole_window():
         state.settings.update_note_seen = ""
         updates.check = lambda: updates.ReleaseInfo("v9.9.9", "https://x/Setup.exe",
                                                     notes="Faster and better.")
+        win.updater._busy = False                        # the app's own check at startup
         win.updater.check(manual=False)
-        pump(app, 0.8)
+        for _ in range(100):
+            pump(app, 0.05)
+            if win.updater.info is not None and getattr(win, "_update_note", None) is not None:
+                break
         assert offered == [] and win.updater.info.version == "v9.9.9"
         note = win._update_note
-        assert note is not None and note.isVisible() and "9.9.9" in note.findChildren(QLabel)[0].text()
+        assert note is not None and note.isVisible() and "Beta v9.9.9" in note.findChildren(QLabel)[0].text()
         cards = [f for f in win.errors_page.findings() if f.level == "notice"]
-        assert len(cards) == 1 and cards[0].title == "SpeakerWeave 9.9.9 is available"
+        assert len(cards) == 1 and cards[0].title == "SpeakerWeave Beta v9.9.9 is available"
         assert cards[0].action in ("update", "update_page")
         assert "Faster and better." in cards[0].detail
+        win.errors_page.refresh()                        # normally a moment later, by its timer
         assert win.errors_btn.text() == "Errors (1 new)" or "Errors (" in win.errors_btn.text()
         note.later_btn.click()
         assert state.settings.update_note_seen == "9.9.9" and win._update_note is None
