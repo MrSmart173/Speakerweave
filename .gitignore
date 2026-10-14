@@ -1,0 +1,8 @@
+.venv/
+build/
+dist/
+__pycache__/
+.pytest_cache/
+*.pyc
+third_party/VBCABLE/
+packaging/simhub/out/

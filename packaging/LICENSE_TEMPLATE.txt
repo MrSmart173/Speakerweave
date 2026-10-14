@@ -1,0 +1,49 @@
+SPEAKERWEAVE LICENCE TERMS
+
+Copyright (c) {YEAR} {PUBLISHER}. All rights reserved.
+
+By installing or using SpeakerWeave (the "software") you agree to these terms. If you
+do not agree, do not install or use the software.
+
+1. Licence
+{PUBLISHER} gives you a personal, non-exclusive, non-transferable licence to install
+and use the software on computers that you own or control.
+
+2. What you may not do
+You may not, without written permission from {PUBLISHER}:
+  a. sell, rent, lend, share, publish, upload or otherwise distribute the software or
+     its installer, in whole or in part, including on other websites or file sharing
+     services;
+  b. modify, decompile, disassemble or reverse engineer the software, except to the
+     extent that the law allows this despite this restriction;
+  c. remove or change any copyright or licence notice in the software.
+
+3. Components from other authors
+The software includes components made by other authors. They are provided under their
+own licences, which are listed in the "licenses" folder inside the installation folder.
+Those licences apply to those components, and nothing in these terms limits the rights
+they give you. VB-CABLE, if installed, is a product of VB-Audio Software and is
+donationware.
+
+4. Updates
+The software can check the internet for a newer version of itself. When it does, it
+only asks for the newest version number and its download, and sends no personal
+information about you. You can switch this off in the software's settings.
+
+5. No warranty
+To the extent permitted by law, the software is provided "as is", without warranty of
+any kind. Nothing in these terms excludes, restricts or modifies any right or remedy,
+or any guarantee, warranty or other term or condition, implied or imposed by the
+Australian Consumer Law or any other law that cannot lawfully be excluded or limited.
+
+6. Limitation of liability
+To the extent permitted by law, {PUBLISHER} is not liable for any loss or damage
+arising from the use of, or the inability to use, the software, including damage to
+hearing or equipment from sound played at high volume.
+
+7. Ending these terms
+These terms end automatically if you break them. You must then stop using the software
+and uninstall it.
+
+8. Law
+These terms are governed by the laws of Queensland, Australia.
