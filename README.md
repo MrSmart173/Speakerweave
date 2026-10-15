@@ -186,10 +186,14 @@ and the speakers snap back to the unit, while the unit stays where it is. Loosen
 more and they return to the places you gave them before. This works the same for a screen or
 soundbar with its two speakers.
 
-Some speaker systems with two speakers and a subwoofer, such as the Logitech G560, tell
-Windows they are 7.1. SpeakerWeave knows better: they show as what they are, a left and a
-right speaker and a subwoofer, each on its own spot in front of you, and the mode stays as it
-was. Their other channels are left silent.
+Some outputs tell Windows they are 7.1 (or 5.1) when they are not: the Logitech G560,
+gaming headsets whose software turns on virtual surround (Logitech G HUB, Corsair iCUE, Razer
+Synapse), and PC soundbars such as the Creative Katana V2. When SpeakerWeave recognises one
+by its name, it shows what is really there: a headset's two sides, or two speakers and a
+subwoofer, in front of you. The mode stays as it was and the other channels are left silent.
+To use every channel Windows offers anyway, set **Speaker model** on the Output tab to
+**Not chosen**. A TV, receiver or sound card keeps every channel: when those offer 5.1 or
+7.1, the speakers are really there.
 
 ## Level meters
 

@@ -404,20 +404,23 @@ class Project:
         slots = [0.0, -1.3, 1.3, -2.1, 2.1]
         return slots[n % len(slots)], self.listener_y - 2.0 + 0.45 * (n // len(slots))
 
-    def make_two_one(self, dev: Device) -> bool:
-        """A 2.1 speaker system (two speakers and a subwoofer) that Windows offers as a
-        surround output, for example a Logitech G560 as 7.1. Only its real speakers stay,
-        as two loose speakers and a subwoofer in front of you instead of a surround
-        shape. Returns True if anything changed."""
-        keep = layout_channels(dev.channels, TWO_ONE)
-        if dev.channels <= 2 or (dev.layout == TWO_ONE
-                                 and sorted(s.channel for s in dev.speakers) == keep):
-            dev.layout = TWO_ONE if dev.channels > 2 else dev.layout
+    def fit_layout(self, dev: Device, layout: str) -> bool:
+        """An output whose hardware has fewer speakers than Windows offers channels: a
+        headset or 2.0 speakers offered as 7.1 (layout "2.0"), or a 2.1 system such as a
+        Logitech G560 offered as 7.1 (layout "2.1"). Only its real speakers stay, in
+        front of you instead of in a surround shape, and its other channels stay silent.
+        Returns True if the speakers changed."""
+        if layout not in REAL_SPEAKERS:
+            return False
+        keep = layout_channels(dev.channels, layout)
+        if dev.channels <= 2 or (dev.layout == layout and sorted(s.channel for s in dev.speakers) == keep):
+            if dev.channels > 2:
+                dev.layout = layout
             return False
         roles = self.mode_roles()
         by_channel = {s.channel: s for s in dev.speakers}
         speakers = []
-        for (name, want), ch in zip(TWO_ONE_SPEAKERS, keep):
+        for (name, want), ch in zip(REAL_SPEAKERS[layout], keep):
             spk = by_channel.get(ch) or Speaker(name=name, channel=ch, role=OFF)
             spk.name = name
             # a role left as it came (silent, or the usual one for that channel) becomes the
@@ -427,18 +430,27 @@ class Project:
                 self.set_role(spk, want if want in roles else OFF)
             speakers.append(spk)
         dev.speakers = speakers
-        dev.layout = TWO_ONE
-        # in front of you like a pair of desk speakers, the subwoofer on the floor beside them
+        dev.layout = layout
+        # in front of you like any pair of speakers, a subwoofer on the floor beside them
         index = self.devices.index(dev) if dev in self.devices else len(self.devices)
         dev.x, dev.y = self._front_slot(index)
-        dev.width, dev.rotation = TWO_ONE_WIDTH, 0.0
-        left, right, sub = speakers
-        left.x, left.y = round(dev.x - TWO_ONE_WIDTH / 2, 3), round(dev.y, 3)
-        right.x, right.y = round(dev.x + TWO_ONE_WIDTH / 2, 3), round(dev.y, 3)
-        sub.x, sub.y = round(dev.x - TWO_ONE_WIDTH, 3), round(dev.y + 0.3, 3)
-        dev.kind = "external"
+        dev.width, dev.rotation = PAIR_WIDTH, 0.0
+        spots = ((-PAIR_WIDTH / 2, 0.0), (PAIR_WIDTH / 2, 0.0), (-PAIR_WIDTH, 0.3))
+        for spk, (dx, dy) in zip(speakers, spots):
+            spk.x, spk.y = round(dev.x + dx, 3), round(dev.y + dy, 3)
+        dev.kind = "external" if layout == TWO_ONE else "builtin"
         dev.free_placed = True
         return True
+
+    def use_all_channels(self, dev: Device) -> bool:
+        """Undoes fit_layout: every channel Windows offers gets its speaker again (chosen
+        by you, so it is not fitted again). Returns True if speakers were added."""
+        had = dev.layout
+        dev.layout = ALL_CHANNELS
+        if not had or had == ALL_CHANNELS:
+            return False
+        channels, dev.channels = dev.channels, 0
+        return self.set_device_channels(dev, channels)
 
     def set_device_channels(self, dev: Device, channels: int) -> bool:
         """Windows now offers a different number of channels for this output
@@ -451,12 +463,12 @@ class Project:
         was_shape = is_shape(dev)
         roles = self.mode_roles()
         used = {s.role for _, s in self.all_speakers()}
-        if dev.layout == TWO_ONE and channels > 2:
-            # the same two speakers and subwoofer, on the channels Windows now gives them
+        if dev.layout in REAL_SPEAKERS and channels > 2:
+            # the same real speakers, on the channels Windows now gives them
+            layout, dev.layout = dev.layout, ""
             dev.channels = channels
             dev.speakers = [s for s in dev.speakers if s.channel in wanted]
-            dev.layout = ""
-            self.make_two_one(dev)
+            self.fit_layout(dev, layout)
             return True
         dev.speakers = [s for s in dev.speakers if s.channel in wanted]
         have = {s.channel for s in dev.speakers}
@@ -613,15 +625,24 @@ def speaker_offset(dev: Device, spk: Speaker) -> float:
     return spk.channel / (n - 1) - 0.5
 
 
-TWO_ONE = "2.1"
-TWO_ONE_SPEAKERS = (("Left", "FL"), ("Right", "FR"), ("Sub", "LFE"))
-TWO_ONE_WIDTH = 0.9         # metres between the two speakers of a 2.1 system, to start with
+# Device.layout: the speakers the hardware really has, when Windows offers more channels
+TWO_ZERO = "2.0"            # two speakers, or a headset
+TWO_ONE = "2.1"             # two speakers and a subwoofer
+ALL_CHANNELS = "all"        # every channel Windows offers, as you chose
+REAL_SPEAKERS = {
+    TWO_ZERO: (("Left", "FL"), ("Right", "FR")),
+    TWO_ONE: (("Left", "FL"), ("Right", "FR"), ("Sub", "LFE")),
+}
+PAIR_WIDTH = 0.9            # metres between the two speakers of a fitted output, to start with
 
 
 def layout_channels(channels: int, layout: str = "") -> list:
-    """The channels of an output that have a speaker, in order. For a 2.1 system: its left
-    speaker, right speaker and subwoofer, wherever Windows puts them (5.1 and 7.1 put the
-    subwoofer on the fourth channel, an output with three channels on the third)."""
+    """The channels of an output that have a speaker, in order. Two speakers: the first
+    two channels. A 2.1 system: its left speaker, right speaker and subwoofer, wherever
+    Windows puts them (5.1 and 7.1 put the subwoofer on the fourth channel, an output
+    with three channels on the third)."""
+    if layout == TWO_ZERO and channels > 2:
+        return [0, 1]
     if layout == TWO_ONE and channels >= 4:
         return [0, 1, 3]
     return list(range(channels))

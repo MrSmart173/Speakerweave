@@ -133,3 +133,60 @@ def test_ticking_a_g560_in_the_app_keeps_the_mode_and_draws_three_speakers():
         win.close()
         state.stop()
         pump(app, 0.1)
+
+
+def test_a_headset_offered_as_7_1_is_its_two_sides():
+    """Logitech G HUB, Corsair iCUE and Razer Synapse can make Windows offer a headset as 7.1."""
+    p = Project()
+    p.set_mode("5.1")
+    name = "Speakers (PRO X Wireless Gaming Headset)"
+    dev = p.add_device(name, 8)
+    speaker_library.apply_model(dev, speaker_library.recognise(name), p)
+    assert [(s.channel, s.role) for s in dev.speakers] == [(0, "FL"), (1, "FR")]
+    assert not is_shape(dev) and dev.kind == "builtin" and p.mode == "5.1"
+
+
+def test_a_pc_soundbar_taking_5_1_is_a_bar_and_its_subwoofer():
+    p = Project()
+    p.set_mode("5.1")
+    name = "Speakers (Sound Blaster Katana V2)"
+    dev = p.add_device(name, 6)
+    speaker_library.apply_model(dev, speaker_library.recognise(name), p)
+    assert [(s.channel, s.role) for s in dev.speakers] == [(0, "FL"), (1, "FR"), (3, "LFE")]
+    assert dev.kind == "builtin" and not is_shape(dev)
+    left, right, sub = (speaker_position(dev, s) for s in dev.speakers)
+    assert abs((left[0] + right[0]) / 2 - sub[0]) < 1e-9          # the subwoofer under the bar
+
+
+def test_real_surround_and_sound_cards_keep_every_channel():
+    p = Project()
+    p.set_mode("5.1")
+    arena = p.add_device("Speakers (SteelSeries Arena 9)", 6)      # a real 5.1 system
+    speaker_library.apply_model(arena, speaker_library.recognise(arena.name), p)
+    assert len(arena.speakers) == 6 and is_shape(arena)
+    tv = p.add_device("LG TV SSCR2 (NVIDIA High Definition Audio)", 8)   # a sound system on eARC
+    speaker_library.apply_model(tv, speaker_library.recognise(tv.name), p)
+    assert len(tv.speakers) == 8
+    card = p.add_device("Speakers (Realtek(R) Audio)", 8)
+    # headphones picked by hand for the green jack of a 7.1 card: the card's other jacks stay
+    speaker_library.apply_model(card, speaker_library.BY_KEY["headphones"], p)
+    speaker_library.apply_model(card, speaker_library.BY_KEY["logitech_g560"], p)
+    assert len(card.speakers) == 8
+
+
+def test_not_chosen_brings_every_channel_back_for_good():
+    p = Project()
+    p.set_mode("5.1")
+    dev = add_g560(p)
+    assert p.use_all_channels(dev)
+    assert [s.channel for s in dev.speakers] == list(range(8)) and is_shape(dev)
+    assert speaker_library.fix_layouts(p) == []                    # your choice stays
+    assert not p.set_device_channels(dev, 8)
+
+
+def test_every_library_layout_is_one_the_app_knows():
+    from speakerweave.model import REAL_SPEAKERS
+    for entry in speaker_library.LIBRARY:
+        assert entry.layout in ("",) + tuple(REAL_SPEAKERS), entry.key
+        if entry.layout:
+            assert entry.patterns, f"{entry.key}: only an output recognised by name is fitted"

@@ -867,6 +867,9 @@ class DevicePanel(QWidget):
             return
         if key == "":
             dev.model = ""
+            if self.state.project.use_all_channels(dev):
+                self.state.touch_streams()      # every channel Windows offers is back
+                self.state.touch_layout()
             self.load()
             self.state.save_soon()
             return

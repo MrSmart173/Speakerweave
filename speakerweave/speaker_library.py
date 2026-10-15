@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .model import SHAKER, TWO_ONE, Device, is_shape, is_sub, set_attached
+from .model import REAL_SPEAKERS, SHAKER, TWO_ONE, TWO_ZERO, Device, is_shape, is_sub, set_attached
 from .presets import apply_range_preset
 
 # category key -> heading in the model list
@@ -53,6 +53,8 @@ def _m(key, name, category, preset="", sub_preset="", kind="", patterns=(), note
 
 
 OWN_SUB = "It has its own subwoofer and crossover, so SpeakerWeave sends it the full range."
+AS_71 = (" Windows may offer it as 5.1 or 7.1, but it has two speakers and a subwoofer, so "
+         "those are the three shown.")
 SIZE_NOTE = "Preset chosen from the woofer size. Fine tune by ear."
 
 LIBRARY = [
@@ -68,40 +70,56 @@ LIBRARY = [
                  r"\bAstro\b", r"Corsair (HS|Void|Virtuoso)", r"BlackShark", r"Kraken", r"Barracuda",
                  r"\bG ?PRO X\b", r"\bG(733|935|635|535|435)\b", r"WH-1000", r"AirPods", r"\bBuds",
                  r"QuietComfort"],
-       note="Headphones play the full range. Several headphones can share one role."),
+       note="Headphones play the full range. Several headphones can share one role. Headset "
+            "software (Logitech G HUB, Corsair iCUE, Razer Synapse) can make Windows offer a "
+            "headset as 7.1, but it has two sides, so those are the two shown.",
+       layout=TWO_ZERO),
 
     # ---- receivers and soundbars (they manage their own bass)
     _m("receiver", "AV receiver", "receiver", "full", kind="external",
        patterns=[r"\bAVR\b", r"\bDENON\b", r"Marantz", r"\bONKYO\b", r"\bPioneer\b",
                  r"YAMAHA\s*(AV|RX|TSR)", r"\bRX-V\d", r"\bSTR-DH", r"\bIntegra\b"],
        note="The receiver handles bass itself. Set its speakers to Small or Large in its own menu."),
+    # PC soundbars on USB: a bar and a subwoofer, whatever Windows is offered (the Katana
+    # V2 takes 5.1 over USB and makes virtual surround from it)
+    _m("razer_leviathan_x", "Razer Leviathan V2 X", "receiver", "full", kind="builtin",
+       patterns=[r"Leviathan V2 X"], note="A soundbar without a subwoofer.", layout=TWO_ZERO),
+    _m("razer_leviathan", "Razer Leviathan", "receiver", "full", kind="builtin",
+       patterns=[r"Leviathan"], note=OWN_SUB + AS_71, layout=TWO_ONE),
+    _m("creative_katana", "Creative Sound Blaster Katana", "receiver", "full", kind="builtin",
+       patterns=[r"Katana"], note=OWN_SUB + AS_71, layout=TWO_ONE),
     _m("soundbar", "Soundbar", "receiver", "full", kind="builtin",
-       patterns=[r"Sound ?bar", r"\bSONOS\b", r"\bBose\b", r"\bHW-[A-Z]\d", r"Leviathan", r"Katana"],
+       patterns=[r"Sound ?bar", r"\bSONOS\b", r"\bBose\b(?!.*SoundLink)", r"\bHW-[A-Z]\d"],
        note="Most soundbars manage their own bass. If yours has no subwoofer, choose the "
             "'Soundbar without a subwoofer' speaker type."),
 
     # ---- desktop systems with their own subwoofer
     _m("logitech_g560", "Logitech G560", "system", "full", kind="external", patterns=[r"G560"],
-       note=OWN_SUB + " Windows may offer it as 7.1, but it has two speakers and a subwoofer, "
-                      "so those are the three shown.", layout=TWO_ONE),
+       note=OWN_SUB + " Logitech G HUB makes Windows offer it as 7.1, but it has two speakers "
+                      "and a subwoofer, so those are the three shown.", layout=TWO_ONE),
     _m("logitech_z906", "Logitech Z906 (5.1)", "system", "full", kind="external", patterns=[r"\bZ906\b"],
        note=OWN_SUB + " Connect it to a 5.1 sound card output with three cables."),
     _m("logitech_z623", "Logitech Z623", "system", "full", kind="builtin", patterns=[r"\bZ623\b"],
-       note=OWN_SUB, layout=TWO_ONE),
+       note=OWN_SUB),
     _m("logitech_z533", "Logitech Z533", "system", "full", kind="builtin", patterns=[r"\bZ533\b"],
-       note=OWN_SUB, layout=TWO_ONE),
-    _m("logitech_z407", "Logitech Z407", "system", "full", kind="builtin", patterns=[r"\bZ407\b"],
+       note=OWN_SUB),
+    _m("logitech_z407", "Logitech Z407", "system", "full", kind="external", patterns=[r"\bZ407\b"],
        note=OWN_SUB, layout=TWO_ONE),
     _m("logitech_z333", "Logitech Z333", "system", "full", kind="builtin", patterns=[r"\bZ333\b"],
-       note=OWN_SUB, layout=TWO_ONE),
+       note=OWN_SUB),
     _m("logitech_z313", "Logitech Z313", "system", "full", kind="builtin", patterns=[r"\bZ313\b"],
-       note=OWN_SUB, layout=TWO_ONE),
-    _m("creative_pebble_plus", "Creative Pebble Plus", "system", "full", kind="builtin",
-       patterns=[r"Pebble (X )?Plus"], note=OWN_SUB),
-    _m("razer_nommo_v2", "Razer Nommo V2", "system", "full", kind="builtin",
-       patterns=[r"Nommo (V2|Pro)"], note=OWN_SUB),
-    _m("steelseries_arena_7_9", "SteelSeries Arena 7 or 9", "system", "full", kind="builtin",
-       patterns=[r"Arena [79]\b"], note=OWN_SUB),
+       note=OWN_SUB),
+    _m("creative_pebble_plus", "Creative Pebble Plus", "system", "full", kind="external",
+       patterns=[r"Pebble (X )?Plus"], note=OWN_SUB, layout=TWO_ONE),
+    _m("razer_nommo_v2_x", "Razer Nommo V2 X", "desktop", "desktop", kind="external",
+       patterns=[r"Nommo V2 X"], note=SIZE_NOTE + " It has no subwoofer.", layout=TWO_ZERO),
+    _m("razer_nommo_v2", "Razer Nommo V2, V2 Pro or Nommo Pro", "system", "full", kind="external",
+       patterns=[r"Nommo (V2|Pro)"], note=OWN_SUB + AS_71, layout=TWO_ONE),
+    _m("steelseries_arena_9", "SteelSeries Arena 9 (5.1)", "system", "full", kind="builtin",
+       patterns=[r"Arena 9\b"], note=OWN_SUB + " A real 5.1 system: Windows offers it as 5.1 "
+                                          "over USB, and its rear speakers go behind you."),
+    _m("steelseries_arena_7", "SteelSeries Arena 7", "system", "full", kind="external",
+       patterns=[r"Arena 7\b"], note=OWN_SUB, layout=TWO_ONE),
 
     # ---- studio monitors and bookshelf speakers (usually on a jack, so picked by hand)
     _m("yamaha_hs5", "Yamaha HS5", "monitor", "monitor_5", kind="external", note=SIZE_NOTE),
@@ -137,12 +155,13 @@ LIBRARY = [
 
     # ---- desktop and portable speakers
     _m("creative_pebble", "Creative Pebble", "desktop", "desktop", kind="builtin",
-       patterns=[r"Pebble"], note=SIZE_NOTE),
-    _m("razer_nommo", "Razer Nommo", "desktop", "desktop", kind="builtin", patterns=[r"Nommo"], note=SIZE_NOTE),
+       patterns=[r"Pebble"], note=SIZE_NOTE, layout=TWO_ZERO),
+    _m("razer_nommo", "Razer Nommo", "desktop", "desktop", kind="builtin", patterns=[r"Nommo"],
+       note=SIZE_NOTE, layout=TWO_ZERO),
     _m("steelseries_arena_3", "SteelSeries Arena 3", "desktop", "small_3", kind="builtin",
-       patterns=[r"Arena 3\b"], note=SIZE_NOTE),
+       patterns=[r"Arena 3\b"], note=SIZE_NOTE, layout=TWO_ZERO),
     _m("logitech_small", "Logitech Z120, Z150 or Z207", "desktop", "desktop", kind="builtin",
-       patterns=[r"\bZ(120|150|207)\b"], note=SIZE_NOTE),
+       patterns=[r"\bZ(120|150|207)\b"], note=SIZE_NOTE, layout=TWO_ZERO),
     _m("bose_companion_2", "Bose Companion 2", "desktop", "desktop", kind="external", note=SIZE_NOTE),
     _m("portable", "Portable Bluetooth speaker", "desktop", "portable", kind="builtin",
        patterns=[r"JBL (Flip|Charge|Go|Clip|Xtreme|Pulse)", r"SoundLink", r"(WONDER|MEGA|ULTIMATE ?EARS ?)BOOM",
@@ -226,21 +245,29 @@ def recognise(device_name: str):
 
 
 def apply_layout(project, dev: Device, entry) -> bool:
-    """Keeps only the speakers the model really has (a 2.1 system that Windows offers as
-    7.1: its two speakers and subwoofer). Returns True if the speakers changed."""
-    if entry is None or entry.layout != TWO_ONE or dev.channels <= 2:
+    """Keeps only the speakers the model really has, when Windows offers more channels: a
+    headset offered as 7.1 keeps its two sides, a 2.1 system such as a Logitech G560 its two
+    speakers and subwoofer. Only for an output that is that model itself (recognised by its
+    Windows name): a model picked for a sound card output is plugged into one of its jacks,
+    and the card's other channels may well have speakers too. Returns True if the speakers
+    changed."""
+    if entry is None or entry.layout not in REAL_SPEAKERS or dev.channels <= 2:
         return False
-    return project.make_two_one(dev)
+    if recognise(dev.name) is not entry:
+        return False
+    return project.fit_layout(dev, entry.layout)
 
 
 def fix_layouts(project) -> list:
     """Outputs added before SpeakerWeave knew their real speakers (a Logitech G560 shown as
-    a 7.1 shape) get them now. Returns the outputs that changed."""
+    a 7.1 shape) get them now, unless you chose all channels yourself. Returns the outputs
+    that changed."""
     changed = []
     for dev in project.devices:
+        if dev.layout:
+            continue
         entry = BY_KEY.get(dev.model) or recognise(dev.name)
-        if entry is not None and entry.layout and dev.layout != entry.layout \
-                and apply_layout(project, dev, entry):
+        if apply_layout(project, dev, entry):
             changed.append(dev)
     return changed
 
@@ -248,9 +275,13 @@ def fix_layouts(project) -> list:
 def apply_model(dev: Device, entry: SpeakerModel, project=None) -> None:
     """Fills in where the sound comes out and the frequency range of every speaker. With
     the project, an output with more channels than the model has speakers keeps only
-    its real ones (see apply_layout)."""
+    its real ones (see apply_layout), and a model without such a limit gets back every
+    channel Windows offers."""
     if project is not None:
-        apply_layout(project, dev, entry)
+        if entry.layout in REAL_SPEAKERS:
+            apply_layout(project, dev, entry)
+        elif dev.layout in REAL_SPEAKERS:
+            project.use_all_channels(dev)
     if entry.kind and entry.kind != dev.kind and not (is_shape(dev) and entry.kind == "external"):
         set_attached(dev, entry.kind == "builtin")
     if entry.preset == "shaker":
