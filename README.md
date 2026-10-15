@@ -186,6 +186,11 @@ and the speakers snap back to the unit, while the unit stays where it is. Loosen
 more and they return to the places you gave them before. This works the same for a screen or
 soundbar with its two speakers.
 
+Some speaker systems with two speakers and a subwoofer, such as the Logitech G560, tell
+Windows they are 7.1. SpeakerWeave knows better: they show as what they are, a left and a
+right speaker and a subwoofer, each on its own spot in front of you, and the mode stays as it
+was. Their other channels are left silent.
+
 ## Level meters
 
 **Levels** under the map shows meters like the mixer in OBS: the first block is the PC sound

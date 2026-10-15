@@ -279,6 +279,9 @@ class Device:
     # True once the loose positions of the speakers (Speaker.x, .y) were set, so
     # detaching them again brings each one back to where it was
     free_placed: bool = False
+    # the speakers the hardware really has, when Windows offers more channels than that:
+    # "2.1" (two speakers and a subwoofer, such as a Logitech G560 offered as 7.1) or ""
+    layout: str = ""
 
     @property
     def title(self) -> str:
@@ -394,24 +397,70 @@ class Project:
             dev.x, dev.y = self.listener_x, self.listener_y
             dev.width, dev.rotation = 2 * SHAPE_RADIUS, 0.0
             return
-        # fan new devices out in front of the listener so they do not overlap
+        dev.x, dev.y = self._front_slot(n)
+
+    def _front_slot(self, n: int) -> tuple:
+        """Fans new devices out in front of the listener so they do not overlap."""
         slots = [0.0, -1.3, 1.3, -2.1, 2.1]
-        dev.x = slots[n % len(slots)]
-        dev.y = self.listener_y - 2.0 + 0.45 * (n // len(slots))
+        return slots[n % len(slots)], self.listener_y - 2.0 + 0.45 * (n // len(slots))
+
+    def make_two_one(self, dev: Device) -> bool:
+        """A 2.1 speaker system (two speakers and a subwoofer) that Windows offers as a
+        surround output, for example a Logitech G560 as 7.1. Only its real speakers stay,
+        as two loose speakers and a subwoofer in front of you instead of a surround
+        shape. Returns True if anything changed."""
+        keep = layout_channels(dev.channels, TWO_ONE)
+        if dev.channels <= 2 or (dev.layout == TWO_ONE
+                                 and sorted(s.channel for s in dev.speakers) == keep):
+            dev.layout = TWO_ONE if dev.channels > 2 else dev.layout
+            return False
+        roles = self.mode_roles()
+        by_channel = {s.channel: s for s in dev.speakers}
+        speakers = []
+        for (name, want), ch in zip(TWO_ONE_SPEAKERS, keep):
+            spk = by_channel.get(ch) or Speaker(name=name, channel=ch, role=OFF)
+            spk.name = name
+            # a role left as it came (silent, or the usual one for that channel) becomes the
+            # speaker's real one. A role you chose yourself stays.
+            usual = DEFAULT_CHANNEL_ROLES[ch] if ch < len(DEFAULT_CHANNEL_ROLES) else OFF
+            if spk.role in (OFF, usual) and spk.role != want:
+                self.set_role(spk, want if want in roles else OFF)
+            speakers.append(spk)
+        dev.speakers = speakers
+        dev.layout = TWO_ONE
+        # in front of you like a pair of desk speakers, the subwoofer on the floor beside them
+        index = self.devices.index(dev) if dev in self.devices else len(self.devices)
+        dev.x, dev.y = self._front_slot(index)
+        dev.width, dev.rotation = TWO_ONE_WIDTH, 0.0
+        left, right, sub = speakers
+        left.x, left.y = round(dev.x - TWO_ONE_WIDTH / 2, 3), round(dev.y, 3)
+        right.x, right.y = round(dev.x + TWO_ONE_WIDTH / 2, 3), round(dev.y, 3)
+        sub.x, sub.y = round(dev.x - TWO_ONE_WIDTH, 3), round(dev.y + 0.3, 3)
+        dev.kind = "external"
+        dev.free_placed = True
+        return True
 
     def set_device_channels(self, dev: Device, channels: int) -> bool:
         """Windows now offers a different number of channels for this output
         (for example the sound card was set from stereo to 5.1). Adds or removes
         speakers to match. Returns True if anything changed."""
         channels = max(1, min(int(channels), MAX_DEVICE_CHANNELS))
-        if channels == dev.channels and len(dev.speakers) == channels:
+        wanted = layout_channels(channels, dev.layout)
+        if channels == dev.channels and sorted(s.channel for s in dev.speakers) == wanted:
             return False
         was_shape = is_shape(dev)
         roles = self.mode_roles()
         used = {s.role for _, s in self.all_speakers()}
-        dev.speakers = [s for s in dev.speakers if s.channel < channels]
+        if dev.layout == TWO_ONE and channels > 2:
+            # the same two speakers and subwoofer, on the channels Windows now gives them
+            dev.channels = channels
+            dev.speakers = [s for s in dev.speakers if s.channel in wanted]
+            dev.layout = ""
+            self.make_two_one(dev)
+            return True
+        dev.speakers = [s for s in dev.speakers if s.channel in wanted]
         have = {s.channel for s in dev.speakers}
-        for ch in range(channels):
+        for ch in wanted:
             if ch in have:
                 continue
             role = DEFAULT_CHANNEL_ROLES[ch] if ch < len(DEFAULT_CHANNEL_ROLES) else OFF
@@ -555,16 +604,42 @@ def speaker_offset(dev: Device, spk: Speaker) -> float:
     n = max(1, len(dev.speakers))
     if n == 1:
         return 0.0
+    if n > 2:
+        # two speakers and a subwoofer: the speakers at the ends, the subwoofer in the middle
+        mains = _mains(dev)
+        if spk not in mains or len(mains) < 2:
+            return 0.0
+        return mains.index(spk) / (len(mains) - 1) - 0.5
     return spk.channel / (n - 1) - 0.5
+
+
+TWO_ONE = "2.1"
+TWO_ONE_SPEAKERS = (("Left", "FL"), ("Right", "FR"), ("Sub", "LFE"))
+TWO_ONE_WIDTH = 0.9         # metres between the two speakers of a 2.1 system, to start with
+
+
+def layout_channels(channels: int, layout: str = "") -> list:
+    """The channels of an output that have a speaker, in order. For a 2.1 system: its left
+    speaker, right speaker and subwoofer, wherever Windows puts them (5.1 and 7.1 put the
+    subwoofer on the fourth channel, an output with three channels on the third)."""
+    if layout == TWO_ONE and channels >= 4:
+        return [0, 1, 3]
+    return list(range(channels))
+
+
+def _mains(dev: Device) -> list:
+    """The speakers of an output that are not subwoofers, in channel order."""
+    return sorted((s for s in dev.speakers if not is_sub(shape_role(s))), key=lambda s: s.channel)
 
 
 SHAPE_RADIUS = 1.6          # metres from the middle of a surround system to its speakers
 
 
 def is_shape(dev: Device) -> bool:
-    """Outputs with more than two speakers (5.1, 7.1 systems) are shown as a
-    shape around the listener instead of a bar."""
-    return len(dev.speakers) > 2
+    """Outputs with more than two speakers besides subwoofers (5.1, 7.1 systems) are
+    shown as a shape around the listener instead of a bar. Two speakers and a
+    subwoofer (2.1) are not."""
+    return len(dev.speakers) > 2 and len(_mains(dev)) > 2
 
 
 def shape_role(spk: Speaker) -> str:
@@ -647,7 +722,9 @@ def unit_ends(dev: Device):
     """The two outer speakers of a unit with built in speakers, or (None, None)."""
     if dev.kind != "builtin" or len(dev.speakers) < 2 or is_shape(dev):
         return None, None
-    ordered = sorted(dev.speakers, key=lambda s: s.channel)
+    ordered = sorted(dev.speakers, key=lambda s: s.channel) if len(dev.speakers) == 2 else _mains(dev)
+    if len(ordered) < 2:
+        return None, None
     return ordered[0], ordered[-1]
 
 

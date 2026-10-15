@@ -993,6 +993,10 @@ class MainWindow(QMainWindow):
         short = speaker_library.friendly_name(dev.name)
         if short != dev.name:
             dev.label = short
+        if state.settings.apply_library:
+            # a 2.1 system that Windows offers as 7.1 (a Logitech G560): its two speakers
+            # and subwoofer, not a surround shape that would also change the mode
+            speaker_library.apply_layout(state.project, dev, entry)
         if is_shape(dev):
             # a surround system: its shape goes round you, and the mode grows to use it
             if state.project.fit_mode_to(dev):
@@ -1002,7 +1006,7 @@ class MainWindow(QMainWindow):
         elif state.project.auto_face:
             face_listener(state.project, dev)
         if entry is not None and state.settings.apply_library:
-            speaker_library.apply_model(dev, entry)
+            speaker_library.apply_model(dev, entry, state.project)
             if entry.category not in ("interface",):
                 state.notice.emit(f"Recognised {dev.name} as {entry.name}. Its preset was filled "
                                   f"in, change it on the Output tab.")

@@ -7,7 +7,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QMenu, QPushButton, QToolTip, QWidget
 
-from ..model import (OFF, ROLE_ANGLES, ROLE_COLORS, ROLE_NAMES, ROLE_SHORT, can_move_alone, is_shape,
+from ..model import (OFF, ROLE_ANGLES, TWO_ONE, ROLE_COLORS, ROLE_NAMES, ROLE_SHORT, can_move_alone, is_shape,
                      is_sub, face_listener, move_speaker, set_attached, shape_role, speaker_angle,
                      speaker_distance, speaker_position)
 from . import theme
@@ -591,7 +591,7 @@ class RoomMap(QWidget):
         dx, dy = c.x() - lp.x(), c.y() - lp.y()
         n = math.hypot(dx, dy) or 1.0
         dx, dy = dx / n, dy / n
-        text = dev.title + ("  (aux out)" if external else "")
+        text = dev.title + ("  (aux out)" if external and dev.layout != TWO_ONE else "")
         p.setFont(font)
         tw = p.fontMetrics().horizontalAdvance(text) + 8
         off = h / 2 + (44 if selected and not external else 22) + abs(dx) * tw / 2

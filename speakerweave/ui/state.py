@@ -6,7 +6,7 @@ import os
 
 from PySide6.QtCore import QObject, QStandardPaths, QTimer, Signal
 
-from .. import backend, default_output, hidden, sounds, windefault
+from .. import backend, default_output, hidden, sounds, speaker_library, windefault
 from ..engine import Engine
 from ..model import OFF, Project, is_shaker, is_sub, speaker_position
 from ..rgb import RgbController
@@ -69,6 +69,7 @@ class AppState(QObject):
         self.settings = AppSettings.load(self.settings_path)
         self.project = self._load_initial(profile_path)
         hidden.pull_hidden(self.settings, self.project)     # outputs hidden on this PC
+        self._fix_layouts(self.project)
         self.engine = Engine(self.project)
         self.engine.rebuild()
         self.runner = backend.AudioRunner(self.project, self.engine)
@@ -98,6 +99,12 @@ class AppState(QObject):
         self._restart_timer.timeout.connect(self._restart)
 
     # ------------------------------------------------------------ profiles
+    def _fix_layouts(self, project: Project) -> None:
+        """Outputs saved before SpeakerWeave knew their real speakers get them now: a
+        Logitech G560 that Windows offers as 7.1 becomes its two speakers and subwoofer."""
+        if self.settings.apply_library:
+            speaker_library.fix_layouts(project)
+
     def _load_initial(self, path: str) -> Project:
         for candidate in (path, self.last_path):
             if candidate and os.path.exists(candidate):
@@ -132,6 +139,7 @@ class AppState(QObject):
         self.stop(keep_windows=was_running)
         if hidden.pull_hidden(self.settings, project):
             self.save_settings()
+        self._fix_layouts(project)
         self.project = project
         self.engine.project = project
         self.follow_windows_volume()

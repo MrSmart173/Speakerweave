@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .model import SHAKER, Device, is_shape, is_sub, set_attached
+from .model import SHAKER, TWO_ONE, Device, is_shape, is_sub, set_attached
 from .presets import apply_range_preset
 
 # category key -> heading in the model list
@@ -43,10 +43,13 @@ class SpeakerModel:
     kind: str = ""              # "builtin", "external" or "" to leave it as it is
     patterns: tuple = field(default_factory=tuple)   # matched against the Windows name
     note: str = ""
+    # the speakers it really has when Windows offers more channels: "2.1" for two speakers
+    # and a subwoofer (shown as those three, not as a surround shape), "" to take Windows' word
+    layout: str = ""
 
 
-def _m(key, name, category, preset="", sub_preset="", kind="", patterns=(), note=""):
-    return SpeakerModel(key, name, category, preset, sub_preset, kind, tuple(patterns), note)
+def _m(key, name, category, preset="", sub_preset="", kind="", patterns=(), note="", layout=""):
+    return SpeakerModel(key, name, category, preset, sub_preset, kind, tuple(patterns), note, layout)
 
 
 OWN_SUB = "It has its own subwoofer and crossover, so SpeakerWeave sends it the full range."
@@ -78,14 +81,21 @@ LIBRARY = [
             "'Soundbar without a subwoofer' speaker type."),
 
     # ---- desktop systems with their own subwoofer
-    _m("logitech_g560", "Logitech G560", "system", "full", kind="builtin", patterns=[r"G560"], note=OWN_SUB),
+    _m("logitech_g560", "Logitech G560", "system", "full", kind="external", patterns=[r"G560"],
+       note=OWN_SUB + " Windows may offer it as 7.1, but it has two speakers and a subwoofer, "
+                      "so those are the three shown.", layout=TWO_ONE),
     _m("logitech_z906", "Logitech Z906 (5.1)", "system", "full", kind="external", patterns=[r"\bZ906\b"],
        note=OWN_SUB + " Connect it to a 5.1 sound card output with three cables."),
-    _m("logitech_z623", "Logitech Z623", "system", "full", kind="builtin", patterns=[r"\bZ623\b"], note=OWN_SUB),
-    _m("logitech_z533", "Logitech Z533", "system", "full", kind="builtin", patterns=[r"\bZ533\b"], note=OWN_SUB),
-    _m("logitech_z407", "Logitech Z407", "system", "full", kind="builtin", patterns=[r"\bZ407\b"], note=OWN_SUB),
-    _m("logitech_z333", "Logitech Z333", "system", "full", kind="builtin", patterns=[r"\bZ333\b"], note=OWN_SUB),
-    _m("logitech_z313", "Logitech Z313", "system", "full", kind="builtin", patterns=[r"\bZ313\b"], note=OWN_SUB),
+    _m("logitech_z623", "Logitech Z623", "system", "full", kind="builtin", patterns=[r"\bZ623\b"],
+       note=OWN_SUB, layout=TWO_ONE),
+    _m("logitech_z533", "Logitech Z533", "system", "full", kind="builtin", patterns=[r"\bZ533\b"],
+       note=OWN_SUB, layout=TWO_ONE),
+    _m("logitech_z407", "Logitech Z407", "system", "full", kind="builtin", patterns=[r"\bZ407\b"],
+       note=OWN_SUB, layout=TWO_ONE),
+    _m("logitech_z333", "Logitech Z333", "system", "full", kind="builtin", patterns=[r"\bZ333\b"],
+       note=OWN_SUB, layout=TWO_ONE),
+    _m("logitech_z313", "Logitech Z313", "system", "full", kind="builtin", patterns=[r"\bZ313\b"],
+       note=OWN_SUB, layout=TWO_ONE),
     _m("creative_pebble_plus", "Creative Pebble Plus", "system", "full", kind="builtin",
        patterns=[r"Pebble (X )?Plus"], note=OWN_SUB),
     _m("razer_nommo_v2", "Razer Nommo V2", "system", "full", kind="builtin",
@@ -215,8 +225,32 @@ def recognise(device_name: str):
     return None
 
 
-def apply_model(dev: Device, entry: SpeakerModel) -> None:
-    """Fills in where the sound comes out and the frequency range of every speaker."""
+def apply_layout(project, dev: Device, entry) -> bool:
+    """Keeps only the speakers the model really has (a 2.1 system that Windows offers as
+    7.1: its two speakers and subwoofer). Returns True if the speakers changed."""
+    if entry is None or entry.layout != TWO_ONE or dev.channels <= 2:
+        return False
+    return project.make_two_one(dev)
+
+
+def fix_layouts(project) -> list:
+    """Outputs added before SpeakerWeave knew their real speakers (a Logitech G560 shown as
+    a 7.1 shape) get them now. Returns the outputs that changed."""
+    changed = []
+    for dev in project.devices:
+        entry = BY_KEY.get(dev.model) or recognise(dev.name)
+        if entry is not None and entry.layout and dev.layout != entry.layout \
+                and apply_layout(project, dev, entry):
+            changed.append(dev)
+    return changed
+
+
+def apply_model(dev: Device, entry: SpeakerModel, project=None) -> None:
+    """Fills in where the sound comes out and the frequency range of every speaker. With
+    the project, an output with more channels than the model has speakers keeps only
+    its real ones (see apply_layout)."""
+    if project is not None:
+        apply_layout(project, dev, entry)
     if entry.kind and entry.kind != dev.kind and not (is_shape(dev) and entry.kind == "external"):
         set_attached(dev, entry.kind == "builtin")
     if entry.preset == "shaker":

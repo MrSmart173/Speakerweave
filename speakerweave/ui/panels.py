@@ -870,7 +870,10 @@ class DevicePanel(QWidget):
             self.load()
             self.state.save_soon()
             return
-        speaker_library.apply_model(dev, speaker_library.BY_KEY[key])
+        before = [s.id for s in dev.speakers]
+        speaker_library.apply_model(dev, speaker_library.BY_KEY[key], self.state.project)
+        if [s.id for s in dev.speakers] != before:
+            self.state.touch_streams()          # speakers left (a 2.1 system offered as 7.1)
         for spk in dev.speakers:
             self.state.engine.update_speaker(spk.id)
         self.state.touch_layout()
