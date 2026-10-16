@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import __version__, backend
+from . import __version__, backend, cable
 from .release import version_name
 from .model import OFF, ROLE_NAMES, Project, is_sub
 
@@ -97,7 +97,7 @@ def check_setup(project: Project, outputs: list, loopbacks: list, report: Report
                    action="listen_virtual")
     elif p.input_kind == "loopback":
         listened = p.input_name.replace(" [Loopback]", "")
-        if not any(lb.name == p.input_name for lb in loopbacks):
+        if not cable.pick(p.input_name, [lb.name for lb in loopbacks]):
             report.add("error", f"{listened} is not available to listen to",
                        "The device chosen under Listen to was not found.",
                        "Press Rescan, then choose it again under Listen to.", action="rescan")
@@ -105,7 +105,8 @@ def check_setup(project: Project, outputs: list, loopbacks: list, report: Report
             report.add("error", f"{listened} is both the source and a speaker",
                        "Playing into the device you listen to makes an echo loop, so it is skipped.",
                        "Listen to the virtual device (SpeakerWeave Virtual Speaker output) instead.")
-        if running is not False and windows_default and listened and windows_default != listened:
+        if running is not False and windows_default and listened \
+                and not cable.matches(listened, windows_default):
             report.add("error", "Windows is not playing into the device SpeakerWeave listens to",
                        f"Windows plays into {windows_default}, SpeakerWeave listens to {listened}. "
                        f"So SpeakerWeave hears nothing (or the speakers also play the sound directly).",
@@ -223,7 +224,7 @@ def check_listening(project: Project, outputs: list, report: Report) -> None:
     if p.input_kind != "loopback" or not backend.loopback_available():
         return
     listened = p.input_name.replace(" [Loopback]", "")
-    target = next((d for d in outputs if d.name == listened), None)
+    target = next((d for d in outputs if cable.matches(listened, d.name)), None)
     if target is None:
         return
     if not _is_virtual(listened):
@@ -233,8 +234,8 @@ def check_listening(project: Project, outputs: list, report: Report) -> None:
     audio = pa.PyAudio()
     got = []
     try:
-        info = next((d for d in audio.get_loopback_device_info_generator()
-                     if d["name"] == p.input_name), None)
+        found = {d["name"]: d for d in audio.get_loopback_device_info_generator()}
+        info = found.get(cable.pick(p.input_name, found))
         if info is None:
             return
         total = int(info["maxInputChannels"])
@@ -291,7 +292,7 @@ def check_chain(project: Project, outputs: list, report: Report, seconds: float 
     tone_target = None
     if p.input_kind == "loopback":
         listened = p.input_name.replace(" [Loopback]", "")
-        target = next((d for d in outputs if d.name == listened), None)
+        target = next((d for d in outputs if cable.matches(listened, d.name)), None)
         if target is not None and _is_virtual(listened):
             tone_target = target
     problems = runner.start()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+import time
 
 from PySide6.QtCore import QObject, QStandardPaths, QTimer, Signal
 
@@ -560,15 +561,34 @@ class AppState(QObject):
         except Exception as exc:
             self.outputs, self.inputs = [], []
             self.scan_error = f"Could not read the sound devices: {exc}"
-        try:
-            self.loopbacks = backend.list_loopbacks()
-        except Exception:
-            self.loopbacks = []
+        self.loopbacks = self._read_loopbacks()
         self._follow_renamed_input()
         self.mic_meters.follow(self.project.mics, self.inputs)
         self.devicesScanned.emit()
         if was_running:
             self.start()
+
+    def _read_loopbacks(self) -> list:
+        """The outputs that can be listened in on. Right after the virtual device is renamed
+        Windows can leave it out for a moment, so when the device listened to is VB-CABLE
+        and Windows has it, the list is read again until it is there (a second at most)."""
+        p = self.project
+        tries = 1
+        if p.input_kind == "loopback" and cable.is_cable_input(p.input_name) and windefault.supported():
+            try:
+                tries = 6 if cable.find()[0] else 1
+            except Exception:
+                tries = 1
+        found = []
+        for attempt in range(tries):
+            try:
+                found = backend.list_loopbacks()
+            except Exception:
+                found = []
+            if cable.pick(p.input_name, [d.name for d in found]) or attempt == tries - 1:
+                break
+            time.sleep(0.2)
+        return found
 
     def _follow_renamed_input(self) -> None:
         """The virtual device was renamed (CABLE Input is now SpeakerWeave Virtual Speaker
@@ -576,10 +596,9 @@ class AppState(QObject):
         p = self.project
         if p.input_kind != "loopback" or not p.input_name:
             return
-        names = {d.name for d in self.loopbacks}
-        other = cable.other_name(p.input_name)
-        if p.input_name not in names and other in names:
-            p.input_name = other
+        now = cable.pick(p.input_name, [d.name for d in self.loopbacks])
+        if now and now != p.input_name:
+            p.input_name = now
             self.engine.rebuild()
             self.save_soon()
             self.inputChanged.emit()

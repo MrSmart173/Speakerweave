@@ -446,9 +446,10 @@ class AudioRunner:
         if not loopback_available():
             raise RuntimeError("listening to an output device needs the PyAudioWPatch library")
         import pyaudiowpatch as pa
+        from . import cable
         self._pa = pa.PyAudio()
-        info = next((d for d in self._pa.get_loopback_device_info_generator()
-                     if d["name"] == p.input_name), None)
+        found = {d["name"]: d for d in self._pa.get_loopback_device_info_generator()}
+        info = found.get(cable.pick(p.input_name, found))
         if info is None:
             raise RuntimeError(f"'{p.input_name}' was not found")
         total = int(info["maxInputChannels"])

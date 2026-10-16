@@ -144,9 +144,13 @@ class ErrorsPage(QWidget):
         for text in state.last_errors:
             if "not connected right now" in text:
                 continue                            # already listed by the setup check
+            if "was not found" in text or "has no output called" in text:
+                advice = "Press Rescan: SpeakerWeave looks for it again and starts the sound."
+            else:
+                advice = ("Close other apps that use this output in exclusive mode, then press "
+                          "Rescan: SpeakerWeave looks again and starts the sound.")
             report.add("error", text.split(":")[0] if ":" in text else "Starting the sound", text,
-                       "Close other apps that use this output in exclusive mode, press Rescan, "
-                       "then Start again.", action="rescan")
+                       advice, action="rescan")
         runner = state.runner
         if runner.running:
             for dev_id, (_fill, _ppm, glitches) in runner.status().items():
@@ -321,7 +325,10 @@ class ErrorsPage(QWidget):
             if state.runner.running:
                 state.touch_streams()
         elif action == "rescan":
+            failed = bool(state.last_errors) and not state.runner.running
             state.scan_devices()
+            if failed:
+                state.start()                       # it stopped over this, so try again
         elif action.startswith("untick:"):
             dev = state.project.find_device(action.split(":", 1)[1])
             if dev is not None:

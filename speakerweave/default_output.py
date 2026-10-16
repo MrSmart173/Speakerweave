@@ -46,6 +46,8 @@ def apply(settings, device_name: str, outputs=None) -> tuple[bool, str]:
         return False, ""
     outputs = windefault.list_outputs() if outputs is None else outputs
     dev_id = windefault.find(device_name, outputs)
+    if not dev_id and cable.is_cable_input(device_name):
+        dev_id = cable.find(outputs)[0]           # VB-CABLE under its other name
     if not dev_id:
         return False, f"Windows has no output called {device_name} right now."
     current = windefault.defaults()

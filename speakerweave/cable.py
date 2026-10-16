@@ -10,11 +10,15 @@ ways wherever SpeakerWeave looks a device up.
 """
 from __future__ import annotations
 
+import time
+
 from . import windefault
 
 OLD_NAME = "CABLE Input"
 NEW_NAME = "SpeakerWeave Virtual Speaker output"
 DRIVER = "(VB-Audio Virtual Cable)"
+LOOPBACK = " [Loopback]"
+SETTLE_S = 5.0          # how long Windows may take to show a new name everywhere
 
 
 def is_cable_input(name: str) -> bool:
@@ -35,6 +39,23 @@ def other_name(name: str) -> str:
     return ""
 
 
+def matches(wanted: str, have: str) -> bool:
+    """True when have is the device wanted: the same name, or VB-CABLE's output under its
+    other name (a setup saved before the rename, or after it was undone)."""
+    if wanted == have:
+        return True
+    return bool(wanted) and is_cable_input(wanted) and is_cable_input(have) \
+        and wanted.endswith(LOOPBACK) == have.endswith(LOOPBACK)
+
+
+def pick(wanted: str, names) -> str:
+    """The name in names that is the device wanted ("" if none): the exact name first."""
+    names = list(names)
+    if wanted in names:
+        return wanted
+    return next((name for name in names if matches(wanted, name)), "")
+
+
 def find(outputs=None) -> tuple:
     """(id, full name) of VB-CABLE's output, or ("", "")."""
     outputs = windefault.list_outputs() if outputs is None else outputs
@@ -51,7 +72,24 @@ def _rename(want: str, only_from: str) -> bool:
     if not dev_id or windefault.short_name(dev_id) != only_from:
         return False                    # not there, or someone gave it a name of their own
     windefault.rename(dev_id, want)
-    return windefault.short_name(dev_id) == want
+    if windefault.short_name(dev_id) != want:
+        return False
+    _wait_for(dev_id, want)
+    return True
+
+
+def _wait_for(dev_id: str, want: str) -> None:
+    """Windows shows the new full name a moment after the rename, and the device can drop
+    out of the lists in between. Waits until the lists of outputs show it again."""
+    deadline = time.monotonic() + SETTLE_S
+    while time.monotonic() < deadline:
+        try:
+            if any(i == dev_id and name.startswith(want) for i, name in windefault.list_outputs()):
+                time.sleep(0.3)         # and a little longer for the sound libraries
+                return
+        except Exception:
+            pass
+        time.sleep(0.15)
 
 
 def brand() -> bool:

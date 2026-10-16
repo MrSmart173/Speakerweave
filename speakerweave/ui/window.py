@@ -492,9 +492,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------ startup
     def _startup(self) -> None:
         state = self.state
-        state.scan_devices()
         if state.settings.name_virtual_device:
-            self.name_virtual_device(True)
+            cable.brand()             # first, so the devices are read once, under the new name
+        state.scan_devices()
         self._output_count = backend.output_count_hint()
         if state.project.rgb_enabled:
             state.rgb.connect()
