@@ -17,6 +17,7 @@ IID_ENUMERATOR = "A95664D2-9614-4F35-A746-DE8DB63617E6"
 CLSID_POLICY = "870AF99C-171D-4F9E-AF0D-E63DF40C2BC9"
 IID_POLICY = "F8679F50-850A-41CF-9C72-430F290290C8"
 FRIENDLY_NAME = ("A45C254E-DF1C-4EFD-8020-67D146A850E0", 14)
+DEVICE_DESC = ("A45C254E-DF1C-4EFD-8020-67D146A850E0", 2)    # the name, without the driver's part
 
 RENDER = 0
 ACTIVE = 0x1
@@ -46,11 +47,14 @@ def _device_id(com, device) -> str:
         com.free(text)
 
 
-def _device_name(device) -> str:
+def _device_name(device, which=None) -> str:
+    """A text property of an output: its full name ("CABLE Input (VB-Audio Virtual Cable)"),
+    or with which=DEVICE_DESC the short name the person can change ("CABLE Input")."""
+    which = which or FRIENDLY_NAME
     store = c_void_p()
     method(device, 4, HRESULT, ctypes.c_uint32, POINTER(c_void_p))(0, byref(store))
     try:
-        key = PROPERTYKEY(guid(FRIENDLY_NAME[0]), FRIENDLY_NAME[1])
+        key = PROPERTYKEY(guid(which[0]), which[1])
         value = PROPVARIANT()
         method(store, 5, HRESULT, POINTER(PROPERTYKEY), POINTER(PROPVARIANT))(byref(key), byref(value))
         try:
@@ -112,6 +116,43 @@ def default_output(role: int = 0) -> tuple[str, str]:
                 release(device)
         finally:
             release(enum)
+
+
+def short_name(device_id: str) -> str:
+    """The name of an output as the Sound control panel lets you change it ("CABLE Input",
+    where the full name is "CABLE Input (VB-Audio Virtual Cable)")."""
+    if not supported():
+        return ""
+    with Apartment() as com:
+        enum = com.create(CLSID_ENUMERATOR, IID_ENUMERATOR)
+        try:
+            device = c_void_p()
+            method(enum, 5, HRESULT, ctypes.c_wchar_p, POINTER(c_void_p))(device_id, byref(device))
+            try:
+                return _device_name(device, DEVICE_DESC)
+            finally:
+                release(device)
+        finally:
+            release(enum)
+
+
+def rename(device_id: str, name: str) -> None:
+    """Renames an output, as typing a new name on the General tab of its Properties in the
+    Sound control panel does. Windows adds the driver's part in brackets itself."""
+    if not supported():
+        raise RuntimeError("Only Windows has sound outputs to rename.")
+    text = ctypes.create_unicode_buffer(name)
+    with Apartment() as com:
+        policy = com.create(CLSID_POLICY, IID_POLICY)
+        try:
+            value = PROPVARIANT()
+            value.vt = 31                                    # VT_LPWSTR
+            value.value = ctypes.cast(text, c_void_p).value
+            key = PROPERTYKEY(guid(DEVICE_DESC[0]), DEVICE_DESC[1])
+            method(policy, 12, HRESULT, ctypes.c_wchar_p, ctypes.c_int, POINTER(PROPERTYKEY),
+                   POINTER(PROPVARIANT))(device_id, 0, byref(key), byref(value))
+        finally:
+            release(policy)
 
 
 def defaults() -> dict:

@@ -204,9 +204,16 @@ def main(argv=None) -> int:
                         help="load everything once, write the result to REPORT and quit")
     parser.add_argument("--tray", action="store_true",
                         help="start hidden, with only the icon in the system tray")
+    parser.add_argument("--unbrand", action="store_true",
+                        help="give the virtual sound device its own name back and quit "
+                             "(the uninstaller does this)")
     args = parser.parse_args(argv)
     if args.selftest:
         return selftest(args.selftest)
+    if args.unbrand:
+        from . import cable
+        cable.unbrand()
+        return 0
 
     from PySide6.QtWidgets import QApplication
     from .ui import theme

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QFileDialo
                                QSpinBox, QSplitter, QStackedWidget, QSystemTrayIcon, QTabWidget,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QWidgetAction)
 
-from .. import backend, paths, speaker_library, updates, windefault
+from .. import backend, cable, paths, speaker_library, updates, windefault
 from ..controls import actions_for_pad, key_bindings
 from ..gamepads import GamepadWatcher
 from ..model import (CUSTOM, OFF, SURROUND_SWITCHABLE, Project, ROLE_COLORS, ROLE_NAMES,
@@ -31,13 +31,15 @@ from .hotkeys import GlobalHotkeys
 from .panels import DevicePanel, LightsPanel, SoundPanel, SpeakerPanel, dim, fill_sound_menu, tag
 from .positions_dialog import PositionsDialog
 from .roommap import RoomMap
-from .errors_page import ErrorsPage, badge_style, badge_text
+from .errors_page import ErrorsPage, badge_flash_style, badge_style, badge_text
 from .easy_sync import start_easy_sync
 from .extras import ExtrasPanel
-from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, UpdateNote
+from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, ProblemsNote, UpdateNote
 from .levels import LevelsBar
 from .settings_page import SettingsPage, about_text
-from .state import remember_setup_folder, setups_dir
+from .now_playing import NowPlaying, NowPlayingBar
+from .performance_page import PerformancePage
+from .state import own_setups_dir, remember_setup_folder, setups_dir
 from .updater import UpdateController
 
 ROLE_KEY = Qt.UserRole
@@ -113,11 +115,14 @@ class MainWindow(QMainWindow):
         self.controls_page = ControlsPage(state, self)
         self.settings_page = SettingsPage(state, self)
         self.errors_page = ErrorsPage(state, self)
+        self.performance_page = PerformancePage(state, self)
         room_page = QWidget()
         room = QVBoxLayout(room_page)
         room.setContentsMargins(0, 0, 0, 0)
         room.setSpacing(6)
         room.addWidget(split, 1)
+        self.now_bar = NowPlayingBar()
+        room.addWidget(self.now_bar)
         self.levels = LevelsBar(state)
         self.levels.setVisible(state.settings.show_levels)
         room.addWidget(self.levels)
@@ -126,6 +131,18 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.controls_page)
         self.pages.addWidget(self.settings_page)
         self.pages.addWidget(self.errors_page)
+        self.pages.addWidget(self.performance_page)
+        self._badge = (0, 0, 0)                 # errors, warnings, notices on the Errors button
+        self._badge_lit = False                 # the red half of a flash
+        self._warn_lit = False                  # the yellow moment of a new warning
+        self._badge_timer = QTimer(self)        # red flashing while there are errors
+        self._badge_timer.setInterval(self.ERROR_FLASH_MS)
+        self._badge_timer.timeout.connect(self._badge_flash)
+        self._warn_timer = QTimer(self)
+        self._warn_timer.setSingleShot(True)
+        self._warn_timer.setInterval(self.WARNING_LIGHT_MS)
+        self._warn_timer.timeout.connect(self._warning_light_off)
+        self._problems_note = None
         self.errors_page.countChanged.connect(self._errors_counted)
         root.addWidget(self.pages, 1)
         self.run_label = QLabel("Stopped")
@@ -150,6 +167,7 @@ class MainWindow(QMainWindow):
         self._update_timer.setInterval(self.UPDATE_CHECK_MS)
         self._update_timer.timeout.connect(self._check_updates_now)
         self._update_timer.start()
+        self.now_playing = NowPlaying(self, self.now_bar)
         self.hotkeys = GlobalHotkeys(self)
         self.hotkeys.triggered.connect(self.actions.run)
         self._build_tray()
@@ -174,6 +192,7 @@ class MainWindow(QMainWindow):
         theme.pad_number_boxes(self)
         self._fit_to_screen()
         QTimer.singleShot(0, self._startup)
+        QTimer.singleShot(self.STARTUP_NOTE_MS, self._startup_problems)
 
     def _fit_to_screen(self) -> None:
         """Opens at a size that fits the screen. On a small or zoomed laptop
@@ -256,14 +275,17 @@ class MainWindow(QMainWindow):
         row.addSpacing(6)
         self.nav = QButtonGroup(self)
         self.nav.setExclusive(True)
-        # page numbers: 0 room, 1 controls, 2 settings, 3 errors (shown second)
-        for index, text in ((0, "Room"), (3, "Errors"), (1, "Controls"), (2, "Settings")):
+        # page numbers: 0 room, 1 controls, 2 settings, 3 errors (shown second), 4 performance
+        for index, text in ((0, "Room"), (3, "Errors"), (1, "Controls"), (2, "Settings"),
+                            (4, "Performance")):
             button = QPushButton(text)
             button.setCheckable(True)
             button.setChecked(index == 0)
             self.nav.addButton(button, index)
             row.addWidget(button)
         self.errors_btn = self.nav.button(3)
+        self.nav.button(4).setToolTip("How much processor and memory SpeakerWeave uses, and how "
+                                      "well the sound keeps up")
         self.errors_btn.setToolTip("Anything that keeps the sound from reaching your speakers, and "
                                    "anything wrong with the surround setup")
         self.nav.idClicked.connect(self.show_page)
@@ -324,11 +346,12 @@ class MainWindow(QMainWindow):
                                  "speaker's sound reaches you together")
         self.sync_btn.clicked.connect(lambda: start_easy_sync(self))
         self.play_btn = QPushButton("Test sound")
-        self.play_btn.setToolTip("Plays a sound on the selected speaker only. You can also right click "
-                                 "a speaker on the map, or select it and press Space.")
+        self.play_btn.setToolTip("Plays a sound on the selected speaker only (you can also right click "
+                                 "a speaker on the map, or select it and press Space), or a sweep "
+                                 "that moves round all your speakers.")
         play_menu = QMenu(self.play_btn)
-        play_menu.aboutToShow.connect(lambda: fill_sound_menu(play_menu, self.state, self._play_selected))
-        fill_sound_menu(play_menu, self.state, self._play_selected)
+        play_menu.aboutToShow.connect(lambda: self._fill_play_menu(play_menu))
+        self._fill_play_menu(play_menu)
         self.play_btn.setMenu(play_menu)
         self.metronome_btn = QPushButton("Metronome")
         self.metronome_btn.setCheckable(True)
@@ -368,6 +391,31 @@ class MainWindow(QMainWindow):
         self.mirror_btn.toggled.connect(self._mirror_toggled)
         self.levels_btn.toggled.connect(self._levels_toggled)
         return box
+
+    # ------------------------------------------------------------ test sounds and sweeps
+    SWEEP_CHOICES = (("circle", "Sweep round the room (360\u00b0)"),
+                     ("sides", "Sweep from left to right (front speakers)"))
+
+    def _fill_play_menu(self, menu) -> None:
+        fill_sound_menu(menu, self.state, self._play_selected)
+        if menu.actions():
+            menu.insertSection(menu.actions()[0], "On the selected speaker")
+        menu.addSection("Round all your speakers")
+        if self.state.engine.sweeping:
+            menu.addAction("Stop the sweep", self.state.stop_sweep)
+        for kind, text in self.SWEEP_CHOICES:
+            action = menu.addAction(text, lambda k=kind: self.state.start_sweep(k))
+            action.setCheckable(True)
+            action.setChecked(self.state.sweep_kind == kind)
+
+    def sweep_text(self) -> str:
+        """What to listen for, under the map while a sweep plays."""
+        if self.state.sweep_kind == "sides":
+            return ("Sweep: a sound glides from your leftmost front speaker to the rightmost and back, "
+                    "twice. It should move smoothly, never jump or drop out.")
+        return ("Sweep: a sound goes round you clockwise from straight ahead, twice. It should glide "
+                "smoothly from speaker to speaker. A jump, a gap or a speaker that stands out needs "
+                "a look at its place on the map, its level or its delay.")
 
     # ------------------------------------------------------------ metronome
     METRONOME_MODES = (("together", "Every speaker together"),
@@ -445,6 +493,8 @@ class MainWindow(QMainWindow):
     def _startup(self) -> None:
         state = self.state
         state.scan_devices()
+        if state.settings.name_virtual_device:
+            self.name_virtual_device(True)
         self._output_count = backend.output_count_hint()
         if state.project.rgb_enabled:
             state.rgb.connect()
@@ -459,12 +509,21 @@ class MainWindow(QMainWindow):
         self.settings_page.refresh_output()
         if state.settings.check_updates and updates.configured():
             QTimer.singleShot(4000, lambda: self.updater.check(manual=False))
+        self.now_playing.start()
         self.apply_hotkeys()
         self.apply_remote()
         self.apply_pads()
         self.controls_page.load()
         if not state.settings.tour_done:
             QTimer.singleShot(800, self._first_tour)
+
+    def name_virtual_device(self, on: bool) -> bool:
+        """Calls VB-CABLE's output "SpeakerWeave Virtual Speaker output" in Windows (on), or
+        gives it its own name back. The device lists are read again when it changed."""
+        changed = cable.brand() if on else cable.unbrand()
+        if changed:
+            self.state.scan_devices()
+        return changed
 
     # ------------------------------------------------------------ tour
     def _first_tour(self) -> None:
@@ -501,6 +560,9 @@ class MainWindow(QMainWindow):
         if getattr(self, "_tour_waiting", False):
             self._tour_waiting = False
             QTimer.singleShot(600, self.start_tour)
+        if getattr(self, "_problems_waiting", False):
+            self._problems_waiting = False
+            QTimer.singleShot(900, self._startup_problems)
 
     # ------------------------------------------------------------ pages, tray, controls
     def show_page(self, index: int) -> None:
@@ -510,9 +572,15 @@ class MainWindow(QMainWindow):
             note.hide()
             note.deleteLater()
             self._update_note = None
+        problems = getattr(self, "_problems_note", None)
+        if index == 3 and problems is not None:     # so are the problems
+            problems.hide()
+            problems.deleteLater()
+            self._problems_note = None
         button = self.nav.button(index)
         if button is not None and not button.isChecked():
             button.setChecked(True)
+        self._paint_badge()                         # no red flashing on the Errors page itself
 
     def _build_tray(self) -> None:
         self.tray = None
@@ -721,9 +789,66 @@ class MainWindow(QMainWindow):
         self.banner.setText("\n".join(serious))
         self.banner.setVisible(bool(serious))
 
+    # ------------------------------------------------------------ the Errors button
+    ERROR_FLASH_MS = 550            # red on, red off, while something is wrong
+    WARNING_LIGHT_MS = 1000         # yellow for a second when a warning appears
+    STARTUP_NOTE_MS = 3500          # the summary of problems, this long after opening
+
     def _errors_counted(self, errors: int, warnings: int, notices: int = 0) -> None:
+        before = self._badge
+        self._badge = (errors, warnings, notices)
         self.errors_btn.setText(badge_text(errors, warnings, notices))
-        self.errors_btn.setStyleSheet(badge_style(errors, warnings, notices))
+        if errors and not self._badge_timer.isActive():
+            self._badge_lit = True
+            self._badge_timer.start()
+        elif not errors:
+            self._badge_timer.stop()
+            self._badge_lit = False
+        if warnings > before[1]:
+            self._warn_lit = True               # a new warning: yellow for a second
+            self._warn_timer.start()
+        elif not warnings:
+            self._warn_lit = False              # gone already: no need to light up
+            self._warn_timer.stop()
+        self._paint_badge()
+
+    def _badge_flash(self) -> None:
+        self._badge_lit = not self._badge_lit
+        self._paint_badge()
+
+    def _warning_light_off(self) -> None:
+        self._warn_lit = False
+        self._paint_badge()
+
+    def _paint_badge(self) -> None:
+        errors, warnings, notices = self._badge
+        if errors and self._badge_lit and not self.errors_btn.isChecked():
+            style = badge_flash_style("error")
+        elif self._warn_lit and not errors:
+            style = badge_flash_style("warning")
+        else:
+            style = badge_style(errors, warnings, notices)
+        if self.errors_btn.styleSheet() != style:
+            self.errors_btn.setStyleSheet(style)
+
+    def _startup_problems(self) -> None:
+        """Opening with something wrong: a summary under the Errors button."""
+        self.errors_page.refresh()
+        found = self.errors_page.last_found
+        if not found or self.pages.currentIndex() == 3:
+            return
+        if not self.isVisible() or self.isMinimized():
+            self._problems_waiting = True       # shown when the window opens
+            return
+        note = ProblemsNote(self, found)
+        note.chosen.connect(self._problems_choice)
+        note.place_under(self.errors_btn)
+        self._problems_note = note
+
+    def _problems_choice(self, what: str) -> None:
+        self._problems_note = None
+        if what == "errors":
+            self.show_page(3)
 
     # ------------------------------------------------------------ updates
     UPDATE_CHECK_MS = 6 * 60 * 60 * 1000    # SpeakerWeave may run in the tray for days
@@ -749,7 +874,7 @@ class MainWindow(QMainWindow):
             return
         note = UpdateNote(self, version_name(info.version), bool(info.url) and paths.is_built())
         note.chosen.connect(lambda what, i=info: self._update_choice(i, what))
-        note.place_under(self.errors_btn)
+        note.place_under(self.errors_btn, below=self._problems_note)
         self._update_note = note
 
     def _update_choice(self, info, what: str) -> None:
@@ -846,13 +971,29 @@ class MainWindow(QMainWindow):
             return
         if not path.lower().endswith(".json"):
             path += ".json"
-        remember_setup_folder(self.state.settings, path)
-        self.state.save_settings()
         try:
             self.state.project.save(path)
-            self.statusBar().showMessage(f"Saved to {path}", 5000)
-        except Exception as exc:
-            QMessageBox.warning(self, "Save this setup", f"Could not save.\n\n{exc}")
+        except OSError as exc:
+            # Windows said no (Program Files, or Documents behind ransomware protection):
+            # the setup goes to SpeakerWeave's own folder instead of being lost
+            folder = os.path.dirname(path)
+            spare = os.path.join(own_setups_dir(), os.path.basename(path))
+            try:
+                self.state.project.save(spare)
+            except Exception as again:
+                QMessageBox.warning(self, "Save this setup", f"Could not save.\n\n{exc}\n\n{again}")
+                return
+            path = spare
+            QMessageBox.information(
+                self, "Save this setup",
+                f"Windows did not let SpeakerWeave save in {folder}, so the setup was saved in "
+                f"{os.path.dirname(spare)} instead. Open and Save start there from now on.\n\n"
+                f"If you want it in Documents: Windows Security's ransomware protection "
+                f"(Controlled folder access) may be blocking SpeakerWeave. Allow SpeakerWeave "
+                f"there to save in Documents.")
+        remember_setup_folder(self.state.settings, path)
+        self.state.save_settings()
+        self.statusBar().showMessage(f"Saved to {path}", 5000)
 
     def _open_guide(self) -> None:
         for name in ("Guide.html", "README.md"):
@@ -900,6 +1041,8 @@ class MainWindow(QMainWindow):
         """A new colour theme was applied: redraw everything painted by hand."""
         self._rebuild_tree()
         self.map.update()
+        self.performance_page.restyle()
+        self.now_playing.restyle()
         for page in (self.speaker_panel, self.device_panel, self.sound_panel, self.lights_panel):
             page.update()
             for child in page.findChildren(QWidget):
@@ -959,11 +1102,43 @@ class MainWindow(QMainWindow):
                     item.setForeground(0, QColor(theme.DIM))
                 head.addChild(item)
             head.setExpanded(True)
+        self._add_mic_section()
         self._hidden_head = None
         if hidden_names:
             self._add_hidden_folder(hidden_names, [o.name for o in state.outputs])
         self._tree_loading = False
         self._highlight_selection()
+
+    def _add_mic_section(self) -> None:
+        """Microphones: the ones on the map (ticked while in use), then the PC's others."""
+        state, proj = self.state, self.state.project
+        available = state.microphones()
+        connected = {d.name for d in available}
+        spare = [d for d in available if d.name not in {m.name for m in proj.mics}]
+        if not proj.mics and not spare:
+            return
+        head = QTreeWidgetItem(["Microphones"])
+        head.setFlags(Qt.ItemIsEnabled)
+        head.setForeground(0, QColor(theme.DIM))
+        head.setToolTip(0, "Tick a microphone to place it on the room map, and drag it to where it is")
+        self.tree.addTopLevelItem(head)
+        for mic in proj.mics:
+            text = mic.title + ("" if mic.name in connected or not state.inputs else "   (not connected)")
+            item = QTreeWidgetItem([text])
+            item.setData(0, ROLE_KEY, ("mic", mic.id, ""))
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable)
+            item.setCheckState(0, Qt.Checked if mic.enabled else Qt.Unchecked)
+            item.setToolTip(0, f"{mic.name}. On the map: drag it to where it is. Right click to "
+                               f"rename or remove it.")
+            head.addChild(item)
+        for d in spare:
+            item = QTreeWidgetItem([d.name])
+            item.setData(0, ROLE_KEY, ("newmic", d.name, ""))
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+            item.setCheckState(0, Qt.Unchecked)
+            item.setToolTip(0, "Tick it to place it on the room map")
+            head.addChild(item)
+        head.setExpanded(bool(proj.mics) or len(spare) <= 3)
 
     def _tree_item_changed(self, item, _column) -> None:
         if self._tree_loading:
@@ -974,6 +1149,15 @@ class MainWindow(QMainWindow):
         state = self.state
         if data[0] == "new" and item.checkState(0) == Qt.Checked:
             self._add_output(data[1], int(data[2]))
+        elif data[0] == "newmic" and item.checkState(0) == Qt.Checked:
+            mic = state.add_mic(data[1])
+            self.map.sel_mic = mic.id
+            state.notice.emit(f"{mic.title} is on the map in front of you. Drag it to where it is.")
+        elif data[0] == "mic":
+            mic = state.project.find_mic(data[1])
+            if mic is not None:
+                mic.enabled = item.checkState(0) == Qt.Checked
+                state.mics_changed()
         elif data[0] == "dev":
             dev = state.project.find_device(data[1])
             if dev is not None:
@@ -1023,6 +1207,10 @@ class MainWindow(QMainWindow):
             self.state.select(data[1], "")
         elif data[0] == "spk":
             self.state.select(data[1], data[2])
+        elif data[0] == "mic":
+            self.state.select("", "")
+            self.map.sel_mic = data[1]
+            self.map.update()
 
     def _highlight_selection(self) -> None:
         state = self.state
@@ -1083,6 +1271,12 @@ class MainWindow(QMainWindow):
             if not name:
                 return
             menu.addAction("Hide this output", lambda: self.hide_output(name))
+        elif data[0] == "mic":
+            mic = self.state.project.find_mic(data[1])
+            if mic is None:
+                return
+            menu.addAction("Rename...", lambda: self.map.rename_mic(mic))
+            menu.addAction("Remove from the map", lambda: self.state.remove_mic(mic.id))
         elif data[0] == "hidden":
             name = data[1]
             menu.addAction("Show this output again", lambda: self.unhide_output(name))
@@ -1231,6 +1425,14 @@ class MainWindow(QMainWindow):
     def _tick_meters(self) -> None:
         state = self.state
         now = time.monotonic()
+        if state.project.mics:
+            # microphones show what they hear whether the sound runs or not
+            heard = state.mic_meters.take_levels()
+            old = self.map.mic_levels
+            self.map.mic_levels = {mic_id: max(level_to_unit(peak), old.get(mic_id, 0.0) * 0.85)
+                                   for mic_id, peak in heard.items()}
+            if heard or old:
+                self.map.update()
         if not state.runner.running:
             if self.map.levels or self.map.test_role:
                 self.map.levels, self.map.clipped, self.map.test_role = {}, set(), ""
@@ -1252,7 +1454,9 @@ class MainWindow(QMainWindow):
         self.map.clipped = {k for k, t in self._clip_until.items() if t > now}
         role = state.runner.test_role if state.project.input_kind == "test" else ""
         self.map.test_role = role
-        if eng.metronome_on:
+        if eng.sweeping:
+            text = self.sweep_text()
+        elif eng.metronome_on:
             text = self.metronome_text()
         else:
             text = f"Test signal now on: {ROLE_NAMES.get(role, role)}" if role else ""
@@ -1312,6 +1516,7 @@ class MainWindow(QMainWindow):
                 self.state.save_settings()
             return
         self.hotkeys.clear()
+        self.now_playing.stop()
         self.simhub.keep_changes()
         self.remote.stop()
         self.pads.stop()

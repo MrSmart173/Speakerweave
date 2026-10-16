@@ -92,7 +92,8 @@ def check_setup(project: Project, outputs: list, loopbacks: list, report: Report
         report.add("warning", "Listening to the test signal",
                    "The test signal only steps a noise through the speakers. The sound of the PC "
                    "is not being picked up.",
-                   "Under Listen to, choose \"Everything this PC plays on: CABLE Input\".",
+                   "Under Listen to, choose \"Everything this PC plays on: SpeakerWeave Virtual "
+                   "Speaker output\" (VB-CABLE's CABLE Input).",
                    action="listen_virtual")
     elif p.input_kind == "loopback":
         listened = p.input_name.replace(" [Loopback]", "")
@@ -103,7 +104,7 @@ def check_setup(project: Project, outputs: list, loopbacks: list, report: Report
         if listened in {d.name for d in enabled}:
             report.add("error", f"{listened} is both the source and a speaker",
                        "Playing into the device you listen to makes an echo loop, so it is skipped.",
-                       "Listen to a virtual device such as CABLE Input instead.")
+                       "Listen to the virtual device (SpeakerWeave Virtual Speaker output) instead.")
         if running is not False and windows_default and listened and windows_default != listened:
             report.add("error", "Windows is not playing into the device SpeakerWeave listens to",
                        f"Windows plays into {windows_default}, SpeakerWeave listens to {listened}. "

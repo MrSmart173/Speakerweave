@@ -143,6 +143,9 @@ class AudioRunner:
         self.running = False
         self.errors: list[str] = []
         self.fifos: dict[str, AdaptiveFifo] = {}
+        self.load = 0.0             # share of each block's time the sound work takes, smoothed
+        self.load_peak = 0.0
+        self.blocks_done = 0
         self._streams: list = []
         self._pa = None
         self._pa_stream = None
@@ -274,8 +277,9 @@ class AudioRunner:
     # -------------------------------------------------------------- audio flow
     def _feed(self, block: np.ndarray, real: bool = True) -> None:
         """One block of captured audio in, one block per device out."""
+        began = time.perf_counter()
         if real:
-            self._last_real = time.perf_counter()
+            self._last_real = began
         try:
             with self._feed_lock:
                 outs = self.engine.process(block)
@@ -286,6 +290,23 @@ class AudioRunner:
                 self._share_target()
         except Exception:
             self.callback_errors += 1
+        self._measure(time.perf_counter() - began, len(block))
+
+    def _measure(self, spent: float, frames: int) -> None:
+        """How much of a block's own time the work on it took (1.0: all of it, and the
+        sound would start to break up)."""
+        sr = getattr(self.engine, "sr", 0.0) or 48000.0
+        if frames <= 0:
+            return
+        load = spent * sr / frames
+        self.blocks_done += 1
+        self.load = load if self.blocks_done == 1 else self.load * 0.97 + load * 0.03
+        self.load_peak = max(self.load_peak, load)
+
+    def take_load_peak(self) -> float:
+        """The highest block load since the last call."""
+        peak, self.load_peak = self.load_peak, 0.0
+        return peak
 
     def _share_target(self) -> None:
         """Every output plays the same distance behind the PC, so they stay in line:

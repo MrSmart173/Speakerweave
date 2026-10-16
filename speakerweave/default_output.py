@@ -8,7 +8,7 @@ PC, and the old default comes back when SpeakerWeave quits.
 """
 from __future__ import annotations
 
-from . import windefault
+from . import cable, windefault
 from .speaker_library import recognise
 
 LOOPBACK_TAG = " [Loopback]"
@@ -23,11 +23,13 @@ def plan(project, loopbacks) -> tuple[str, str, str]:
         device = project.input_name.replace(LOOPBACK_TAG, "")
         if device in in_setup:
             return "", "", (f"{device} is one of your speakers, so Windows should not play into it. "
-                            f"Choose a virtual device such as CABLE Input under Listen to.")
+                            f"Choose the virtual device (SpeakerWeave Virtual Speaker output) under Listen to.")
         return device, project.input_name, ""
     if project.input_kind == "device":
         return "", "", ""
-    for info in loopbacks:
+    # VB-CABLE first (SpeakerWeave Virtual Speaker output), then any other virtual device
+    ordered = sorted(loopbacks, key=lambda info: not cable.is_cable_input(getattr(info, "name", info)))
+    for info in ordered:
         name = getattr(info, "name", info)
         device = name.replace(LOOPBACK_TAG, "")
         entry = recognise(device)

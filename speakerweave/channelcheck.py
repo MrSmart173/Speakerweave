@@ -21,7 +21,7 @@ import time
 
 import numpy as np
 
-from . import backend, windefault
+from . import backend, cable, windefault
 
 NAMES = {8: ["FL", "FR", "C", "SUB", "RL", "RR", "SL", "SR"], 6: ["FL", "FR", "C", "SUB", "SL", "SR"],
          2: ["FL", "FR"]}
@@ -269,7 +269,7 @@ def main(argv=None) -> int:
 def _run(say) -> int:
     from . import rawwasapi
     sd = backend._sd()
-    target = next((o for o in backend.list_outputs() if o.name.lower().startswith("cable input")), None)
+    target = next((o for o in backend.list_outputs() if cable.is_cable_input(o.name)), None)
     if target is None:
         say("No CABLE Input device was found.")
         return 1

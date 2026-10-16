@@ -289,6 +289,22 @@ class Device:
 
 
 @dataclass
+class Mic:
+    """A microphone placed on the room map, around the speakers: where it is, and which of
+    the PC's recording devices it is."""
+    id: str = field(default_factory=_id)
+    name: str = ""                      # the recording device, as Windows names it
+    label: str = ""                     # your own name for it
+    enabled: bool = True
+    x: float = 0.0                      # metres, like the speakers
+    y: float = 0.0
+
+    @property
+    def title(self) -> str:
+        return self.label or self.name
+
+
+@dataclass
 class Project:
     mode: str = "5.1"
     input_kind: str = "test"    # device | loopback | test
@@ -297,6 +313,9 @@ class Project:
     blocksize: int = 480
     buffer_ms: float = 0.0      # extra safety buffer. 0: as little delay as the devices allow
     upmix: bool = True
+    # while no subwoofer plays, a speaker's "Nothing below" cut is left out: the lows it
+    # would hand to a subwoofer have nowhere else to go, and cutting them sounds thin
+    keep_lows: bool = True
     bass_redirect: bool = True
     bass_redirect_db: float = -6.0
     lfe_to_mains: bool = True
@@ -319,6 +338,7 @@ class Project:
     shaker_game_db: float = -3.0
     devices: list[Device] = field(default_factory=list)
     extra_sources: list[ExtraSource] = field(default_factory=list)
+    mics: list[Mic] = field(default_factory=list)       # microphones placed on the map
     setup_version: int = 2      # 2: the safety buffer defaults to 0 ms
 
     # ---- lookups
@@ -343,12 +363,23 @@ class Project:
             for spk in dev.speakers:
                 yield dev, spk
 
-    def roles_in_use(self) -> list[str]:
+    def roles_in_use(self, playing_only: bool = False) -> list[str]:
         """Roles of the current mode that at least one switched on speaker plays
-        (plus the bass shaker, which every mode has)."""
-        present = {s.role for d, s in self.all_speakers() if d.enabled and s.channel < d.channels}
+        (plus the bass shaker, which every mode has). playing_only leaves out muted
+        speakers, and with a speaker on solo every speaker that is not."""
+        present = {s.role for d, s in self.all_speakers() if d.enabled and s.channel < d.channels
+                   and (not playing_only or self.speaker_plays(s))}
         used = [r for r in self.mode_roles() if r in present]
         return used + ([SHAKER] if SHAKER in present else [])
+
+    def speaker_plays(self, spk) -> bool:
+        """Not muted, and not silenced by another speaker's solo."""
+        any_solo = any(s.solo for d, s in self.all_speakers() if d.enabled)
+        return not spk.mute and (spk.solo or not any_solo)
+
+    def has_playing_sub(self) -> bool:
+        return any(is_sub(s.role) and self.speaker_plays(s)
+                   for d, s in self.all_speakers() if d.enabled and s.channel < d.channels)
 
     def role_choices(self) -> list[str]:
         """Every role a speaker can be given in this mode."""
@@ -371,6 +402,23 @@ class Project:
         return next((d for d in self.devices if d.name == name), None)
 
     # ---- editing
+    # ---- microphones
+    def add_mic(self, name: str) -> Mic:
+        """A microphone joins the map, near you: the first just in front, the next ones
+        round you, so none sits on another."""
+        n = len(self.mics)
+        angle = math.radians((0.0, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0, 180.0)[n % 8])
+        mic = Mic(name=name, x=round(self.listener_x + MIC_START_M * math.sin(angle), 3),
+                  y=round(self.listener_y - MIC_START_M * math.cos(angle), 3))
+        self.mics.append(mic)
+        return mic
+
+    def find_mic(self, mic_id: str) -> Optional[Mic]:
+        return next((m for m in self.mics if m.id == mic_id), None)
+
+    def remove_mic(self, mic_id: str) -> None:
+        self.mics = [m for m in self.mics if m.id != mic_id]
+
     def add_device(self, name: str, channels: int) -> Device:
         n = len(self.devices)
         channels = max(1, min(int(channels), MAX_DEVICE_CHANNELS))
@@ -601,6 +649,7 @@ def _project_from_dict(data: dict) -> Project:
         src["routes"] = [_build(Route, r) for r in src.get("routes", []) if isinstance(r, dict)]
         sources.append(_build(ExtraSource, src))
     data["extra_sources"] = sources
+    data["mics"] = [_build(Mic, m) for m in data.get("mics", []) or [] if isinstance(m, dict)]
     proj = _build(Project, data)
     custom = [r for r in POSITION_ORDER if r in (proj.custom_roles or [])]
     proj.custom_roles = custom if any(not is_sub(r) for r in custom) else ["FL", "FR"]
@@ -623,6 +672,9 @@ def speaker_offset(dev: Device, spk: Speaker) -> float:
             return 0.0
         return mains.index(spk) / (len(mains) - 1) - 0.5
     return spk.channel / (n - 1) - 0.5
+
+
+MIC_START_M = 0.6           # a new microphone starts this far from you
 
 
 # Device.layout: the speakers the hardware really has, when Windows offers more channels

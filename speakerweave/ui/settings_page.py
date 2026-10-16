@@ -81,7 +81,8 @@ class SettingsPage(QWidget):
         self.default_output = QCheckBox("Make SpeakerWeave the main sound output of Windows")
         v.addWidget(self.default_output)
         v.addWidget(dim("While SpeakerWeave plays, Windows plays into the device SpeakerWeave listens "
-                        "to (for example CABLE Input), so everything the PC plays comes out of your "
+                        "to (SpeakerWeave Virtual Speaker output), so everything the PC plays comes "
+                        "out of your "
                         "speakers. With the sound starting when SpeakerWeave opens, and SpeakerWeave "
                         "starting with Windows, this happens every time the PC starts. If Listen to "
                         "is on the test signal, a virtual sound device is picked for you."))
@@ -92,6 +93,11 @@ class SettingsPage(QWidget):
                                        "sound")
         self.auto_surround.setToolTip("Stereo music and video is still spread over every speaker")
         v.addWidget(self.auto_surround)
+        self.name_cable = QCheckBox("Call the virtual device \"SpeakerWeave Virtual Speaker output\" "
+                                    "in Windows (instead of CABLE Input)")
+        self.name_cable.setToolTip("Windows adds the driver's name, VB-Audio Virtual Cable, in brackets. "
+                                   "Uninstalling SpeakerWeave gives it its own name back.")
+        v.addWidget(self.name_cable)
         self.follow_volume = QCheckBox("Follow the Windows volume and mute (volume keys, mouse wheel, "
                                        "headset buttons)")
         self.follow_volume.setToolTip("The volume Windows shows for the device SpeakerWeave listens to "
@@ -134,6 +140,17 @@ class SettingsPage(QWidget):
         v = QVBoxLayout(box)
         self.meters = QCheckBox("Show how loud each speaker is playing on the map")
         v.addWidget(self.meters)
+        col.addWidget(box)
+
+        box = QGroupBox("Now playing")
+        v = QVBoxLayout(box)
+        self.now_bar = QCheckBox("Show what is playing on this PC under the room map")
+        self.now_popup = QCheckBox("Show a popup in the corner of the screen when a new song or video starts")
+        v.addWidget(self.now_bar)
+        v.addWidget(self.now_popup)
+        v.addWidget(dim("Works with Spotify, Apple Music, YouTube and other videos in a browser, and "
+                        "any app that Windows' own media controls show. The popup closes itself "
+                        "after 5 seconds."))
         col.addWidget(box)
 
         col.addWidget(self._build_look())
@@ -195,6 +212,8 @@ class SettingsPage(QWidget):
         self.watch.toggled.connect(lambda v: self._set("watch_devices", v))
         self.library.toggled.connect(lambda v: self._set("apply_library", v))
         self.meters.toggled.connect(self._meters_toggled)
+        self.now_bar.toggled.connect(self._now_bar_toggled)
+        self.now_popup.toggled.connect(lambda v: self._set("media_popup", v))
         self.updates_box.toggled.connect(lambda v: self._set("check_updates", v))
         self.check_now.clicked.connect(lambda: window.updater.check(manual=True))
         self.open_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(config_dir())))
@@ -203,6 +222,7 @@ class SettingsPage(QWidget):
         self.default_output.toggled.connect(self._default_output_toggled)
         self.restore_output.toggled.connect(lambda v: self._set("restore_output", v))
         self.auto_surround.toggled.connect(lambda v: self._set("auto_surround", v))
+        self.name_cable.toggled.connect(self._name_cable_toggled)
         self.follow_volume.toggled.connect(self._follow_volume_toggled)
         self.output_now.clicked.connect(lambda: self._make_default(show=True))
         self.boot_btn.clicked.connect(lambda: self.start_windows.setChecked(True))
@@ -438,6 +458,8 @@ class SettingsPage(QWidget):
         self.default_output.setChecked(s.default_output)
         self.restore_output.setChecked(s.restore_output)
         self.auto_surround.setChecked(s.auto_surround)
+        self.name_cable.setChecked(s.name_virtual_device)
+        self.name_cable.setEnabled(windefault.supported())
         self.follow_volume.setChecked(s.follow_windows_volume)
         self.auto_surround.setEnabled(s.default_output)
         self.restore_output.setEnabled(s.default_output)
@@ -495,6 +517,8 @@ class SettingsPage(QWidget):
         self.watch.setChecked(s.watch_devices)
         self.library.setChecked(s.apply_library)
         self.meters.setChecked(s.show_meters)
+        self.now_bar.setChecked(s.show_now_playing)
+        self.now_popup.setChecked(s.media_popup)
         self.updates_box.setChecked(s.check_updates)
         self._load_look()
         self._load_sounds()
@@ -506,6 +530,20 @@ class SettingsPage(QWidget):
             return
         setattr(self.state.settings, field, value)
         self.state.save_settings()
+
+    def _name_cable_toggled(self, on: bool) -> None:
+        self._set("name_virtual_device", on)
+        if self._loading:
+            return
+        if self.window.name_virtual_device(on):
+            self.state.notice.emit("The virtual device is now called "
+                                   + ("SpeakerWeave Virtual Speaker output." if on else "CABLE Input again."))
+
+    def _now_bar_toggled(self, on: bool) -> None:
+        self._set("show_now_playing", on)
+        now_playing = getattr(self.window, "now_playing", None)
+        if now_playing is not None:
+            now_playing.bar.show_now(now_playing.now if on else None)
 
     def _follow_volume_toggled(self, on: bool) -> None:
         self._set("follow_windows_volume", on)

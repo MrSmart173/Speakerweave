@@ -14,7 +14,7 @@ import numpy as np
 
 from .dsp import SpeakerChain, PinkNoise, db_to_lin
 from .mixer import build_matrix
-from .model import Project, OFF, source_layout_for
+from .model import Project, OFF, is_shaker, is_sub, source_layout_for
 
 
 @dataclass
@@ -55,6 +55,11 @@ PAIR_HOLD_S = 1.0          # stereo music keeps filling every speaker this long 
 PAIR_MIN_S = 0.1           # both fronts playing together this long before it counts as stereo
 PAIR_LEVEL = 0.03          # together: the quieter front within 30 dB of the louder one
 METRONOME_LEAD_S = 0.08    # the first click comes this long after the metronome is switched on
+# speaker sweeps: (seconds per pass, passes). "circle" goes once round the room per pass,
+# "sides" from the leftmost front speaker to the rightmost and back again per pass
+SWEEPS = {"circle": (6.0, 2), "sides": (5.0, 2)}
+SWEEP_LEVEL = 0.22         # pink noise, a little under the level of the test sounds
+SWEEP_FADE_S = 0.25
 QUIET = 1e-4
 
 class Engine:
@@ -67,6 +72,13 @@ class Engine:
         self._plan: _Plan | None = None
         self._master_now = 0.0
         self._noise = PinkNoise(7)
+        self.keep_lows = False      # no subwoofer playing: speakers keep their lows
+        # speaker sweep: (kind, ((speaker id, angle), ...), number). Replaced as a whole.
+        self._roam = ("", (), 0)
+        self._roam_seen = 0
+        self._roam_clock = 0
+        self._roam_noise = PinkNoise(11)
+        self.sweep_done = 0         # the number of the last sweep that played to its end
         self._identify_id = ""
         self._identify_left = 0
         self._identify_total = 0
@@ -119,7 +131,9 @@ class Engine:
             # Only roles that really have a speaker count as "the room". The sound
             # of any other channel is shared between the speakers that do exist,
             # so nothing goes missing while a role is still unassigned.
-            room = p.roles_in_use()
+            # Muted speakers, and with a solo every other speaker, leave the room: what they
+            # would have played goes to the speakers still playing, so the music stays whole.
+            room = p.roles_in_use(playing_only=True)
             options = dict(upmix=p.upmix, bass_redirect=p.bass_redirect,
                            bass_redirect_db=p.bass_redirect_db, lfe_to_mains=p.lfe_to_mains)
             stereo_matrix, extra, stereo_roles, front_pair = None, (), None, ()
@@ -137,6 +151,13 @@ class Engine:
             matrix = build_matrix(self.source_roles, room, shaker_gain=shaker, **options)
             if stereo_matrix is not None:
                 stereo_matrix = build_matrix(stereo_roles, room, shaker_gain=shaker, **options)
+            if any_solo:
+                # a soloed speaker plays the whole sound folded into it: no louder than one
+                # full channel, so it can be compared with how it sounds among the others
+                matrix = _no_louder(matrix, room)
+                if stereo_matrix is not None:
+                    stereo_matrix = _no_louder(stereo_matrix, room)
+            self.keep_lows = bool(p.keep_lows) and not p.has_playing_sub()
             # which speakers get extra sound, and from which channels
             targets = {}
             for src in p.extra_sources:
@@ -157,7 +178,9 @@ class Engine:
                     chain = self.chains.get(spk.id)
                     if chain is None:
                         chain = self.chains[spk.id] = SpeakerChain(self.sr)
-                    chain.configure(spk, dev.trim_ms, dev.gain_db)
+                    chain.configure(spk, dev.trim_ms, dev.gain_db,
+                                    keep_lows=self.keep_lows and not is_sub(spk.role)
+                                    and not is_shaker(spk.role))
                     alive.add(spk.id)
                     ridx = room.index(spk.role) if spk.role in room else -1
                     plays = not spk.mute and (spk.solo or not any_solo)
@@ -189,7 +212,8 @@ class Engine:
         dev, spk = self.project.find_speaker(spk_id)
         chain = self.chains.get(spk_id)
         if spk is not None and chain is not None:
-            chain.configure(spk, dev.trim_ms, dev.gain_db)
+            chain.configure(spk, dev.trim_ms, dev.gain_db,
+                            keep_lows=self.keep_lows and not is_sub(spk.role) and not is_shaker(spk.role))
 
     SWEEP_FROM, SWEEP_TO = 20.0, 16000.0
 
@@ -235,6 +259,93 @@ class Engine:
         pos = done + np.arange(n)
         envelope = np.clip(np.minimum(pos, self._identify_total - pos) / fade, 0.0, 1.0)
         return sound * envelope
+
+    # ---------------------------------------------------------- speaker sweeps
+    def set_sweep(self, kind: str, targets, number: int) -> None:
+        """A noise that moves from speaker to speaker instead of the PC sound. kind "circle":
+        all the way round the room, clockwise from straight ahead. "sides": from the
+        leftmost speaker to the rightmost and back. targets: [(speaker id, angle)], the
+        angle as seen from the listener (0 ahead, 90 right, -90 left)."""
+        self._roam = (kind if kind in SWEEPS else "circle",
+                      tuple(sorted(((str(i), float(a)) for i, a in targets), key=lambda t: t[1])),
+                      int(number))
+
+    def stop_sweep(self) -> None:
+        self._roam = ("", (), 0)
+
+    @property
+    def sweeping(self) -> bool:
+        kind, targets, number = self._roam
+        return bool(kind and targets) and number != self.sweep_done
+
+    @staticmethod
+    def _pan(angle: float, points: list, circle: bool) -> dict:
+        """{speaker id: gain} for a sound at angle, shared by the two speakers either side
+        of it at equal power."""
+        if len(points) == 1:
+            return {points[0][0]: 1.0}
+        if circle:
+            ring = sorted(((a % 360.0, i) for i, a in points))
+            angle %= 360.0
+            for k, (a, i) in enumerate(ring):
+                b, j = ring[(k + 1) % len(ring)]
+                span = (b - a) % 360.0 or 360.0
+                into = (angle - a) % 360.0
+                if into <= span:
+                    t = into / span
+                    break
+        else:
+            line = sorted((a, i) for i, a in points)
+            angle = min(max(angle, line[0][0]), line[-1][0])
+            for k in range(len(line) - 1):
+                (a, i), (b, j) = line[k], line[k + 1]
+                if angle <= b or k == len(line) - 2:
+                    t = 0.0 if b == a else (angle - a) / (b - a)
+                    break
+        t = min(max(t, 0.0), 1.0)
+        gains = {i: float(np.cos(t * np.pi / 2))}
+        gains[j] = gains.get(j, 0.0) + float(np.sin(t * np.pi / 2))
+        return gains
+
+    def _sweep_angle(self, kind: str, points: list, seconds: float) -> float:
+        period, _passes = SWEEPS[kind]
+        if kind == "circle":
+            return 360.0 * (seconds / period)
+        left, right = points[0][1], points[-1][1]
+        u = (seconds / period) % 1.0
+        x = u * 2.0 if u <= 0.5 else 2.0 - u * 2.0        # out and back in one pass
+        return left + (right - left) * x
+
+    def _sweep(self, n: int, roam) -> dict:
+        """{speaker id: (n,) samples} for this block of the sweep."""
+        kind, points, number = roam
+        if number != self._roam_seen:                      # a new sweep: from the start
+            self._roam_seen = number
+            self._roam_clock = 0
+        period, passes = SWEEPS[kind]
+        total = int(period * passes * self.sr)
+        start = self._roam_clock
+        self._roam_clock = start + n
+        if start >= total:
+            self.sweep_done = number
+            return {}
+        pos = start + np.arange(n)
+        fade = max(1, int(SWEEP_FADE_S * self.sr))
+        envelope = np.clip(np.minimum(pos, total - pos) / fade, 0.0, 1.0)
+        noise = self._roam_noise.block(n) * SWEEP_LEVEL * envelope
+        points = list(points)
+        circle = kind == "circle"
+        first = self._pan(self._sweep_angle(kind, points, start / self.sr), points, circle)
+        last = self._pan(self._sweep_angle(kind, points, (start + n) / self.sr), points, circle)
+        ramp = np.linspace(0.0, 1.0, n, endpoint=False)
+        out = {}
+        for spk_id in set(first) | set(last):
+            a, b = first.get(spk_id, 0.0), last.get(spk_id, 0.0)
+            if a or b:
+                out[spk_id] = noise * (a + (b - a) * ramp)
+        if start + n >= total:
+            self.sweep_done = number
+        return out
 
     # ---------------------------------------------------------- metronome
     def set_metronome(self, bpm: float, targets, turns: bool = False) -> None:
@@ -371,6 +482,9 @@ class Engine:
             clicks = self._metronome(n, metro)
         else:
             self._metro_seen = metro
+        roam = self._roam
+        if roam[0] and roam[1] and roam[2] != self.sweep_done:
+            clicks = self._sweep(n, roam)                   # the PC sound waits meanwhile
 
         want = plan.master * self.windows_gain
         if self._master_now != want:
@@ -424,6 +538,21 @@ class Engine:
             part = block[:, :width].astype(np.float64) @ mix[:, :width].T
             total = part if total is None else total + part
         return total
+
+
+def _no_louder(matrix: np.ndarray, room: list) -> np.ndarray:
+    """Scales down every main speaker's row whose channels add up to more than one full
+    channel, so folding a whole song into one speaker never makes it louder or clips, even
+    where left and right are the same (a voice in the middle): the classic mono fold,
+    half of each. Subwoofer and shaker rows are left as they are."""
+    out = matrix.copy()
+    for r, role in enumerate(room):
+        if is_sub(role) or is_shaker(role):
+            continue
+        total = float(np.sum(np.abs(out[r])))
+        if total > 1.0:
+            out[r] /= total
+    return out
 
 
 class AdaptiveFifo:

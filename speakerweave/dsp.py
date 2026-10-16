@@ -58,10 +58,11 @@ def _order(slope_db: int) -> int:
     return {12: 2, 24: 4, 48: 8}.get(int(slope_db), 4)
 
 
-def design_sos(spk: Speaker, sr: float) -> np.ndarray:
-    """All filters of one speaker as a stack of second order sections."""
+def design_sos(spk: Speaker, sr: float, keep_lows: bool = False) -> np.ndarray:
+    """All filters of one speaker as a stack of second order sections. keep_lows leaves
+    out its "Nothing below" cut (no subwoofer to take those notes)."""
     sections = []
-    if spk.hp_on:
+    if spk.hp_on and not keep_lows:
         sections.append(signal.butter(_order(spk.hp_slope), _clamp_freq(spk.hp_freq, sr),
                                       btype="highpass", fs=sr, output="sos"))
     if spk.lp_on:
@@ -101,13 +102,15 @@ class SpeakerChain:
         self.peak = 0.0             # for the level meters
         self.clipped = False
 
-    def configure(self, spk: Speaker, extra_delay_ms: float = 0.0, extra_gain_db: float = 0.0) -> None:
+    def configure(self, spk: Speaker, extra_delay_ms: float = 0.0, extra_gain_db: float = 0.0,
+                  keep_lows: bool = False) -> None:
         """Called from the user interface thread."""
         gain = db_to_lin(spk.gain_db + extra_gain_db)
         if spk.invert:
             gain = -gain
         delay_ms = min(max(spk.delay_ms + extra_delay_ms, 0.0), MAX_DELAY_MS)
-        self._pending = (design_sos(spk, self.sr), gain, int(round(delay_ms * self.sr / 1000.0)))
+        self._pending = (design_sos(spk, self.sr, keep_lows), gain,
+                         int(round(delay_ms * self.sr / 1000.0)))
 
     def _apply_pending(self) -> None:
         pending, self._pending = self._pending, None

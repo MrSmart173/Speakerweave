@@ -40,8 +40,11 @@ class AppSettings:
     previous_outputs: dict = field(default_factory=dict)  # {role: device id} before we changed it
     managed_output: str = ""            # the device id SpeakerWeave made the default
     auto_surround: bool = True          # set the virtual device to 7.1 so games send surround
+    name_virtual_device: bool = True    # call VB-CABLE's output "SpeakerWeave Virtual Speaker output"
     follow_windows_volume: bool = True  # the Windows volume (keys, mouse wheel) sets the speakers' too
     show_levels: bool = True            # the level meters under the room map
+    show_now_playing: bool = True       # what is playing on the PC, under the room map
+    media_popup: bool = True            # a popup in the corner when a new song or video starts
     simhub_link: bool = True            # answer the SpeakerWeave plugin in SimHub
     game_setups: dict = field(default_factory=dict)   # SimHub game name -> setup file ("" = no game)
     games_seen: list = field(default_factory=list)    # games the SimHub plugin has reported

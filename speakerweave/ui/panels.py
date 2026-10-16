@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDoubleSpinBo
                                QPushButton, QScrollArea, QSlider, QSpinBox, QVBoxLayout, QWidget)
 
 from ..model import (EQBand, OFF, ROLE_COLORS, ROLE_NAMES, can_move_alone, default_eq, face_listener,
+                     is_shaker, is_sub,
                      is_shape, move_speaker, partner_speaker, set_attached, speaker_position)
 from .. import speaker_library
 from ..presets import BY_KEY as PRESETS_BY_KEY, RANGE_PRESETS, apply_range_preset, matching_preset
@@ -488,6 +489,10 @@ class SpeakerPanel(QWidget):
             text = f"Plays everything up to {freq_text(spk.lp_freq)}."
         else:
             text = "Plays the full range."
+        if spk.hp_on and self.state.engine.keep_lows and not is_sub(spk.role) \
+                and not is_shaker(spk.role):
+            text += (f" No subwoofer is playing, so it keeps its notes below "
+                     f"{freq_text(spk.hp_freq)} for now (Sound tab, Bass).")
         self.range_text.setText(text)
 
     def _band(self):
@@ -985,9 +990,15 @@ class SoundPanel(QWidget):
         self.redirect = QCheckBox("Send the bass of every channel to the subwoofer as well")
         self.redirect_db = NumSlider(-24.0, 6.0, 0.5, " dB")
         self.lfe_mains = QCheckBox("No subwoofer in this mode: play the bass channel on the fronts")
+        self.keep_lows = QCheckBox("No subwoofer playing: every speaker keeps its lows")
+        self.keep_lows.setToolTip("A speaker's \"Nothing below\" limit hands its lowest notes to "
+                                  "the subwoofer. With no subwoofer playing they would simply be "
+                                  "lost and the sound gets thin, so the limit waits until there is "
+                                  "one. Off: the limits always apply.")
         form.addRow(self.redirect)
         form.addRow("Amount", self.redirect_db)
         form.addRow(self.lfe_mains)
+        form.addRow(self.keep_lows)
         col.addWidget(box)
 
         box = QGroupBox("Timing")
@@ -1024,6 +1035,7 @@ class SoundPanel(QWidget):
         self.redirect.toggled.connect(lambda v: self._set("bass_redirect", v, "routing"))
         self.redirect_db.valueChanged.connect(lambda v: self._set("bass_redirect_db", v, "routing"))
         self.lfe_mains.toggled.connect(lambda v: self._set("lfe_to_mains", v, "routing"))
+        self.keep_lows.toggled.connect(lambda v: self._set("keep_lows", v, "routing"))
         self.buffer.valueChanged.connect(lambda v: self._set("buffer_ms", v, "streams"))
         self.room_w.valueChanged.connect(lambda v: self._set("room_w", v, "layout"))
         self.room_h.valueChanged.connect(lambda v: self._set("room_h", v, "layout"))
@@ -1044,6 +1056,7 @@ class SoundPanel(QWidget):
         self.redirect.setChecked(p.bass_redirect)
         self.redirect_db.setValue(p.bass_redirect_db)
         self.lfe_mains.setChecked(p.lfe_to_mains)
+        self.keep_lows.setChecked(p.keep_lows)
         self.buffer.setValue(p.buffer_ms)
         self.room_w.setValue(p.room_w)
         self.room_h.setValue(p.room_h)

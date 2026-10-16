@@ -60,7 +60,8 @@ SIZE_NOTE = "Preset chosen from the woofer size. Fine tune by ear."
 LIBRARY = [
     # ---- not speakers at all
     _m("virtual", "Virtual sound device", "virtual",
-       patterns=[r"VB-Audio", r"CABLE (Input|Output)", r"VoiceMeeter", r"Virtual Audio Cable",
+       patterns=[r"VB-Audio", r"CABLE (Input|Output)", r"SpeakerWeave Virtual", r"VoiceMeeter",
+                 r"Virtual Audio Cable",
                  r"Steam Streaming"],
        note="This is not a speaker. Choose it under Listen to as the source instead."),
 

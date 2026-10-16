@@ -112,6 +112,77 @@ class UpdateNote(QFrame):
         self.chosen.emit(what)
         self.deleteLater()
 
+    def place_under(self, button, below=None) -> None:
+        """Just below button, its right edge in line with the button's (or below the
+        widget below, when another note is already there)."""
+        parent = self.parentWidget()
+        self.adjustSize()
+        corner = button.mapTo(parent, QPoint(button.width(), button.height()))
+        top = corner.y() + 6
+        if below is not None and below.isVisible():
+            top = below.y() + below.height() + 8
+        x = max(8, min(corner.x() - self.width(), parent.width() - self.width() - 8))
+        y = max(8, min(top, parent.height() - self.height() - 8))
+        self.move(x, y)
+        self.raise_()
+        self.show()
+
+
+class ProblemsNote(QFrame):
+    """When SpeakerWeave opens with something wrong: a short summary under the Errors button,
+    with Go to Errors or Ignore."""
+    chosen = Signal(str)                    # "errors" or "ignore"
+    SHOWN = 3                               # problems listed by name, the rest counted
+
+    def __init__(self, window, findings: list):
+        super().__init__(window)
+        self.setObjectName("problemsNote")
+        self.setFixedWidth(WIDTH + 30)
+        errors = [f for f in findings if f.level == "error"]
+        warnings = [f for f in findings if f.level == "warning"]
+        edge = theme.BAD if errors else theme.WARN
+        self.setStyleSheet(
+            f"QFrame#problemsNote {{ background: {theme.PANEL_2}; border: 2px solid {edge}; "
+            f"border-radius: 10px; }}")
+        col = QVBoxLayout(self)
+        col.setContentsMargins(14, 12, 14, 12)
+        col.setSpacing(6)
+        parts = []
+        if errors:
+            parts.append(f"{len(errors)} error{'s' if len(errors) != 1 else ''}")
+        if warnings:
+            parts.append(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}")
+        head = QLabel(" and ".join(parts) + " found")
+        head.setStyleSheet("font-weight: 700;")
+        col.addWidget(head)
+        for f in findings[:self.SHOWN]:
+            color = theme.BAD if f.level == "error" else theme.WARN
+            kind = "Error" if f.level == "error" else "Warning"
+            line = QLabel(f"<span style='color:{color}; font-weight:700'>{kind}</span>&nbsp; {f.title}")
+            line.setWordWrap(True)
+            col.addWidget(line)
+        if len(findings) > self.SHOWN:
+            more = QLabel(f"and {len(findings) - self.SHOWN} more")
+            more.setObjectName("dim")
+            col.addWidget(more)
+        row = QHBoxLayout()
+        self.go_btn = QPushButton("Go to Errors")
+        self.go_btn.setObjectName("primary")
+        self.go_btn.setToolTip("See every problem with what to do about it")
+        self.ignore_btn = QPushButton("Ignore")
+        self.ignore_btn.setToolTip("Close this note. The Errors page still lists them")
+        row.addWidget(self.go_btn)
+        row.addWidget(self.ignore_btn)
+        col.addLayout(row)
+        self.go_btn.clicked.connect(lambda: self._choose("errors"))
+        self.ignore_btn.clicked.connect(lambda: self._choose("ignore"))
+        self.adjustSize()
+
+    def _choose(self, what: str) -> None:
+        self.hide()
+        self.chosen.emit(what)
+        self.deleteLater()
+
     def place_under(self, button) -> None:
         """Just below button, its right edge in line with the button's."""
         parent = self.parentWidget()

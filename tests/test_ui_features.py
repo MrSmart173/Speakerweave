@@ -304,3 +304,51 @@ def test_setups_are_saved_in_documents_not_where_the_app_is_installed(monkeypatc
     win._quitting = True
     win.close()
     app.processEvents()
+
+
+def test_a_folder_windows_will_not_let_us_write_to_is_never_used(monkeypatch):
+    """Program Files, or Documents behind Windows' ransomware protection: the Save window
+    does not start there, and a save that Windows refuses lands in SpeakerWeave's own folder."""
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+    from speakerweave.model import Project
+    from speakerweave.settings import AppSettings
+    from speakerweave.ui import state as state_module
+    from speakerweave.ui.state import AppState
+    from speakerweave.ui.window import MainWindow
+
+    docs, locked, own = tempfile.mkdtemp(), tempfile.mkdtemp(), tempfile.mkdtemp()
+    monkeypatch.setattr(state_module, "documents_dir", lambda: docs)
+    monkeypatch.setattr(state_module, "config_dir", lambda: own)
+    real_can_write = state_module.can_write
+    blocked = {locked, os.path.join(docs, "SpeakerWeave setups")}
+    monkeypatch.setattr(state_module, "can_write",
+                        lambda folder: folder not in blocked and real_can_write(folder))
+    settings = AppSettings(last_setup_folder=locked)
+    assert state_module.setups_dir(settings) == os.path.join(own, "Setups")    # neither is used
+    state_module.remember_setup_folder(settings, os.path.join(locked, "x.json"))
+    assert settings.last_setup_folder == locked and state_module.setups_dir(settings) != locked
+
+    app = QApplication.instance() or QApplication([])
+    backend._sd = lambda: FakeSoundDevice([{"name": "Speakers", "outputs": 2}])
+    state = AppState("")
+    state.settings.default_output = state.settings.start_sound = state.settings.simhub_link = False
+    state.settings.tour_done = True
+    win = MainWindow(state)
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a: (os.path.join(locked, "Desk.json"), "")))
+    told = []
+    monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a: told.append(a[2])))
+    real_save = Project.save
+
+    def refusing_save(self, path):
+        if os.path.dirname(path) == locked:
+            raise PermissionError(13, "Access is denied", path)
+        real_save(self, path)
+    monkeypatch.setattr(Project, "save", refusing_save)
+    win._save_setup()
+    saved = os.path.join(own, "Setups", "Desk.json")
+    assert os.path.isfile(saved) and "saved in" in told[0]
+    assert state.settings.last_setup_folder == os.path.join(own, "Setups")
+    win._quitting = True
+    win.close()
+    app.processEvents()

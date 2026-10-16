@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 
 from PySide6.QtCore import QObject, QStandardPaths, QTimer, Signal
 
-from .. import backend, default_output, hidden, sounds, speaker_library, windefault
+from .. import backend, cable, default_output, hidden, sounds, speaker_library, windefault
 from ..engine import Engine
 from ..model import OFF, Project, is_shaker, is_sub, speaker_position
+from ..mics import MicMeters, is_microphone
 from ..rgb import RgbController
 from ..settings import AppSettings
 from ..winvolume import VolumeFollower
@@ -27,24 +29,64 @@ def documents_dir() -> str:
     return path or os.path.expanduser("~")
 
 
+def can_write(folder: str) -> bool:
+    """True if SpeakerWeave can really create a file in this existing folder. A folder can
+    exist and still say no: anything under Program Files, or Documents when Windows
+    Security's ransomware protection (Controlled folder access) does not know the app."""
+    if not folder or not os.path.isdir(folder):
+        return False
+    probe = os.path.join(folder, f".speakerweave write test {os.getpid()}.tmp")
+    try:
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(probe)
+        return True
+    except OSError:
+        return False
+
+
+def own_setups_dir() -> str:
+    """SpeakerWeave's own setups folder in AppData, which Windows always lets it write to."""
+    path = os.path.join(config_dir(), "Setups")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _in_app_folder(folder: str) -> bool:
+    """True for the folder SpeakerWeave is installed in, or one inside it."""
+    from .. import paths
+    if not paths.is_built():
+        return False
+    app = os.path.normcase(os.path.abspath(os.path.dirname(sys.executable)))
+    here = os.path.normcase(os.path.abspath(folder))
+    return here == app or here.startswith(app + os.sep)
+
+
 def setups_dir(settings=None) -> str:
     """Where the Open and Save windows for setups start: the folder last used, else
-    "SpeakerWeave setups" in Documents. Never the folder SpeakerWeave runs from, which
-    Windows does not let it write to when it is installed under Program Files."""
+    "SpeakerWeave setups" in Documents, else SpeakerWeave's own folder in AppData. Only a
+    folder SpeakerWeave can really write to, never the folder it is installed in."""
     last = getattr(settings, "last_setup_folder", "") if settings is not None else ""
-    if last and os.path.isdir(last):
+    if last and not _in_app_folder(last) and can_write(last):
         return last
     path = os.path.join(documents_dir(), "SpeakerWeave setups")
     try:
         os.makedirs(path, exist_ok=True)
     except OSError:
-        return documents_dir()
-    return path
+        pass
+    if can_write(path):
+        return path
+    return own_setups_dir()
 
 
 def remember_setup_folder(settings, path: str) -> None:
-    if path:
-        settings.last_setup_folder = os.path.dirname(os.path.abspath(path))
+    """The next Open or Save window starts in this setup's folder, if it can be written to."""
+    folder = os.path.dirname(os.path.abspath(path)) if path else ""
+    if folder and not _in_app_folder(folder) and can_write(folder):
+        settings.last_setup_folder = folder
+
+
+SWEEP_FRONT_DEG = 75.0      # "sides" sweeps the front speakers: no further round than this (side ones sit at 90)
 
 
 class AppState(QObject):
@@ -60,6 +102,7 @@ class AppState(QObject):
     settingsChanged = Signal()
     inputChanged = Signal()         # Listen to was changed by the app itself
     metronomeChanged = Signal()     # the metronome was switched on or off, or changed
+    sweepChanged = Signal()         # a speaker sweep started or ended
     windowsVolumeChanged = Signal()  # the Windows volume of the device listened to changed
 
     def __init__(self, profile_path: str = ""):
@@ -75,6 +118,7 @@ class AppState(QObject):
         self.runner = backend.AudioRunner(self.project, self.engine)
         self.rgb = RgbController(self.project, self.engine.level)
         self.winvol = VolumeFollower(self._windows_volume)
+        self.mic_meters = MicMeters()
         self.sel_dev = ""
         self.sel_spk = ""
         self.eq_clipboard = None
@@ -87,6 +131,11 @@ class AppState(QObject):
         self._temporary_run = False         # sound was started only to play a test sound
         self._restarting = False
         self._clicks_fixed = False          # Easy sync chose the clicking speakers itself
+        self.sweep_kind = ""                # the speaker sweep playing: "circle" or "sides"
+        self._sweep_number = 0
+        self._sweep_timer = QTimer(self)
+        self._sweep_timer.setInterval(200)
+        self._sweep_timer.timeout.connect(self._watch_sweep)
         self.saving_blocked = False         # SpeakerWeave's own data was just removed: write nothing
         self.last_errors: list = []         # problems from the last start, for the Errors page
         self._save_timer = QTimer(self)
@@ -141,6 +190,7 @@ class AppState(QObject):
             self.save_settings()
         self._fix_layouts(project)
         self.project = project
+        self.mic_meters.follow(project.mics, self.inputs)
         self.engine.project = project
         self.follow_windows_volume()
         self.runner.project = project
@@ -182,6 +232,26 @@ class AppState(QObject):
 
     def touch_layout(self) -> None:
         self.layoutChanged.emit()
+        self.save_soon()
+
+    # ------------------------------------------------------------ microphones
+    def microphones(self) -> list:
+        """The PC's recording devices that are microphones (not VB-CABLE or Stereo Mix)."""
+        return [d for d in self.inputs if is_microphone(d.name)]
+
+    def add_mic(self, name: str):
+        mic = self.project.add_mic(name)
+        self.mics_changed()
+        return mic
+
+    def remove_mic(self, mic_id: str) -> None:
+        self.project.remove_mic(mic_id)
+        self.mics_changed()
+
+    def mics_changed(self) -> None:
+        """Microphones were added, removed, ticked or unticked."""
+        self.mic_meters.follow(self.project.mics, self.inputs)
+        self.structureChanged.emit()
         self.save_soon()
 
     def touch_streams(self) -> None:
@@ -290,7 +360,7 @@ class AppState(QObject):
 
     def _end_temporary_run(self) -> None:
         if self._temporary_run and self.runner.running and not self.engine.identifying \
-                and not self.engine.metronome_on:
+                and not self.engine.metronome_on and not self.engine.sweeping:
             self._temporary_run = False
             self.stop()
 
@@ -347,10 +417,72 @@ class AppState(QObject):
         found.sort()
         return [(spk_id, low) for low, _angle, spk_id in found]
 
+    # ------------------------------------------------------------ speaker sweeps
+    def sweep_targets(self, kind: str) -> list:
+        """[(speaker id, angle)] of the speakers a sweep visits: every speaker except the
+        subwoofers and shakers, and for "sides" only those in front of you (all of them
+        when fewer than two are in front)."""
+        p = self.project
+        found = []
+        for dev in p.devices:
+            if not dev.enabled:
+                continue
+            for spk in dev.speakers:
+                if spk.role == OFF or spk.mute or spk.channel >= dev.channels \
+                        or is_sub(spk.role) or is_shaker(spk.role):
+                    continue
+                x, y = speaker_position(dev, spk)
+                found.append((spk.id, math.degrees(math.atan2(x - p.listener_x, -(y - p.listener_y)))))
+        if kind == "sides":
+            front = [t for t in found if abs(t[1]) <= SWEEP_FRONT_DEG]
+            if len(front) >= 2:
+                found = front
+        return found
+
+    def start_sweep(self, kind: str) -> bool:
+        """A sound that moves round the speakers ("circle") or from left to right across
+        the front ("sides"). Starts the sound for it when it is stopped."""
+        targets = self.sweep_targets(kind)
+        if not targets:
+            self.notice.emit("Tick an output with speakers first.")
+            return False
+        if self.engine.metronome_on:
+            self.stop_metronome()
+        if not self.runner.running:
+            self.start(temporary=True)
+            if not self.runner.running:
+                return False
+        self._sweep_number += 1
+        self.sweep_kind = kind
+        self.engine.set_sweep(kind, targets, self._sweep_number)
+        self._sweep_timer.start()
+        self.sweepChanged.emit()
+        return True
+
+    def stop_sweep(self) -> None:
+        self.engine.stop_sweep()
+        self._sweep_ended()
+
+    def _watch_sweep(self) -> None:
+        if not self.engine.sweeping:
+            self._sweep_ended()
+
+    def _sweep_ended(self) -> None:
+        self._sweep_timer.stop()
+        self.sweep_kind = ""
+        self.engine.stop_sweep()
+        self.sweepChanged.emit()
+        self._end_temporary_run()
+
     def start_metronome(self, mode: str = "", bpm: int = 0) -> bool:
         """Steady clicks on the speakers instead of the PC sound, to hear whether they
         are in time with each other. Starts the sound for it when it is stopped."""
         s = self.settings
+        if self.engine.sweeping:                    # one test at a time
+            self.engine.stop_sweep()
+            self._sweep_timer.stop()
+            self.sweep_kind = ""
+            self.sweepChanged.emit()
         if mode:
             s.metronome_mode = mode
         if bpm:
@@ -432,9 +564,25 @@ class AppState(QObject):
             self.loopbacks = backend.list_loopbacks()
         except Exception:
             self.loopbacks = []
+        self._follow_renamed_input()
+        self.mic_meters.follow(self.project.mics, self.inputs)
         self.devicesScanned.emit()
         if was_running:
             self.start()
+
+    def _follow_renamed_input(self) -> None:
+        """The virtual device was renamed (CABLE Input is now SpeakerWeave Virtual Speaker
+        output, or back): Listen to follows it, also in setups saved before."""
+        p = self.project
+        if p.input_kind != "loopback" or not p.input_name:
+            return
+        names = {d.name for d in self.loopbacks}
+        other = cable.other_name(p.input_name)
+        if p.input_name not in names and other in names:
+            p.input_name = other
+            self.engine.rebuild()
+            self.save_soon()
+            self.inputChanged.emit()
 
     def input_choices(self) -> list[tuple[str, str, str]]:
         """(text, kind, name) for the input selector."""
@@ -513,6 +661,7 @@ class AppState(QObject):
         self.save_settings()
 
     def shutdown(self) -> None:
+        self.mic_meters.close_all()
         self.winvol.stop()
         self.restore_default_output()
         self.runner.stop()

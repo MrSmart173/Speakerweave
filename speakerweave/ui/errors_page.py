@@ -83,6 +83,7 @@ class ErrorsPage(QWidget):
         self.state = state
         self.window = window
         self.full_report = None            # the last full sound check
+        self.last_found = []               # the errors and warnings of the last look, worst first
         self.full_time = ""
         self._checking = False
         self._relay = _Relay()
@@ -251,6 +252,7 @@ class ErrorsPage(QWidget):
         if self.full_time:
             text += f"  Last full sound check: {self.full_time}."
         self.summary.setText(text)
+        self.last_found = [f for f in found if f.level in ("error", "warning")]
         self.countChanged.emit(errors, warnings, notices)
 
     # ------------------------------------------------------------ full check
@@ -358,12 +360,19 @@ def badge_text(errors: int, warnings: int, notices: int = 0) -> str:
 
 
 def badge_style(errors: int, warnings: int, notices: int = 0) -> str:
+    """The Errors button at rest. Warnings leave it in the theme's own colours: it only
+    lights up yellow for a moment when one appears (see badge_flash_style)."""
     if errors:
         return (f"QPushButton {{ border-color: {theme.BAD}; color: {theme.BAD}; font-weight: 600; }}"
                 f"QPushButton:checked {{ background: {theme.BAD}; color: #ffffff; }}")
-    if warnings:
-        return f"QPushButton {{ border-color: {theme.WARN}; }}"
     if notices:
         return f"QPushButton {{ border-color: {theme.ACCENT}; color: {theme.ACCENT}; font-weight: 600; }}"
     return ""
 
+
+def badge_flash_style(kind: str) -> str:
+    """The Errors button lit up: "warning" yellow (for a moment), "error" red (flashing)."""
+    color = theme.WARN if kind == "warning" else theme.BAD
+    ink = "#1b1b1b" if kind == "warning" else "#ffffff"
+    return (f"QPushButton, QPushButton:checked {{ background: {color}; border-color: {color}; "
+            f"color: {ink}; font-weight: 600; }}")

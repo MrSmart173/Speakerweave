@@ -15,7 +15,7 @@ from ..speaker_library import recognise
 from . import theme
 
 CARD_WIDTH = 380
-DEFAULT_CABLE = "CABLE Input (VB-Audio Virtual Cable)"
+DEFAULT_CABLE = "SpeakerWeave Virtual Speaker output (VB-Audio Virtual Cable)"
 GAP = 14                # between the spotlight and the card
 PAD = 6                 # around the spotlit part
 

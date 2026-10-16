@@ -25,7 +25,14 @@ shape its sound.
   sound cards. Recognised outputs get a matching preset as soon as you tick them
 * Test sounds on a single speaker: right click it on the map, or select it and press Space.
   Add up to five sounds of your own (WAV, MP3, M4A, WMA, FLAC and more)
-* Solo a speaker and every other one shows as muted on the map
+* Solo a speaker and every other one shows as muted on the map. Muted speakers hand their part
+  to the speakers still playing, and a soloed speaker plays the whole sound
+* Sweeps that glide a sound round the room (360°) or across the front speakers
+* Now playing: the song or video playing on the PC (Spotify, Apple Music, YouTube and more)
+  under the map with play, pause and skip, and a popup that closes itself after 5 seconds
+* Microphones on the room map, placed where they really are, glowing with what they hear
+* A Performance page with SpeakerWeave's share of the processor and memory, how hard the
+  sound work runs, delay, dropouts and a two minute chart
 * Colour themes: six presets, or your own colours, also straight from Adobe Color
 * Plays by itself as soon as it opens, and makes itself the Windows sound output while it
   plays. Stop it and Windows gets its old output back
@@ -37,7 +44,8 @@ shape its sound.
 * Level meters like a mixer: one block for the PC sound and one per output, with a bar for
   every channel
 * An Errors page that lists anything keeping the sound from your speakers or spoiling the
-  surround, each with a button that fixes it
+  surround, each with a button that fixes it. The Errors button flashes red for an error and
+  lights yellow for a new warning, and a note at startup sums up what is wrong
 * Bass shakers (ButtKicker and other tactile transducers) as a speaker role, limited to the
   low frequencies and fed by the game's bass, by effects, or both
 * Extra sound sources played on top of the game sound, such as SimHub's ShakeIt effects
@@ -157,14 +165,29 @@ and that makes no sound by itself.
    https://vb-audio.com/Cable/) and restart the PC.
 2. Open SpeakerWeave and tick your outputs. That is all.
 
-When SpeakerWeave opens it listens to CABLE Input, sets it to 7.1 so games send real surround
-channels, makes it the Windows sound output and starts the sound. Everything Windows plays
+When SpeakerWeave opens it renames VB CABLE's output (CABLE Input) to **SpeakerWeave Virtual
+Speaker output**, so Windows' lists say what it is for (Windows adds "VB-Audio Virtual Cable"
+in brackets itself). It listens to it, sets it to 7.1 so games send real surround channels,
+makes it the Windows sound output and starts the sound. Everything Windows plays
 then arrives in SpeakerWeave and is spread over your speakers. Press **Stop**, or quit, and
 Windows goes back to the output it used before.
 
 While only the two front channels carry sound (music, most videos), SpeakerWeave spreads them
 over every speaker. As soon as a game sends surround, each channel goes to its own speaker.
 The **Errors** page shows which of the two is happening right now.
+
+If a game or app lets you choose its sound output, choose **SpeakerWeave Virtual Speaker
+output**. Uninstalling SpeakerWeave gives the device its own name back, and **Call the virtual
+device "SpeakerWeave Virtual Speaker output"** on the Settings page switches the renaming off.
+
+## Now playing
+
+When music or a video plays on the PC (Spotify, Apple Music, YouTube in a browser, or any app
+that Windows' own media controls show), its title, artist and picture appear in a strip under
+the map, with previous, play or pause, and next. When a new song or video starts, a small
+popup shows it in the corner of the screen. It closes itself after 5 seconds (it waits while
+the mouse is on it), or straight away with its X. Both can be switched off on the Settings
+page under **Now playing**.
 
 Each step can be switched off on the **Settings** page under **Windows sound output**, and
 **Listen to** at the top can be set by hand. You can listen to a normal output device instead
@@ -204,7 +227,10 @@ is close to clipping. The thin line above each bar holds the latest peak for a m
 
 ## Errors
 
-The **Errors** button at the top shows a number when something is wrong. The page lists
+The **Errors** button at the top shows a number when something is wrong. While there is an
+error it flashes red (it stays steady while the Errors page is open). A new warning lights it
+yellow for a second, then it goes back to your colours. When SpeakerWeave opens with
+something wrong, a note under the button sums it up, with **Go to Errors** or **Ignore**. The page lists
 everything that keeps the sound from your speakers (no virtual device, Windows playing
 somewhere else, an output unplugged, a device refusing to open) and everything that spoils
 the surround (the virtual device set to stereo, missing speaker positions), each with a
@@ -276,12 +302,45 @@ speakers or through its headphone or aux jack. So:
 If a monitor has neither speakers nor an audio jack, Windows usually does not list it as a
 sound output at all, and then there is nothing for the app to send sound to.
 
+## Performance
+
+The **Performance** page shows how much of the PC SpeakerWeave uses: its share of the
+processor and of the memory, how much of each block's time the sound work takes (above 70%
+the sound can start to break up), the delay SpeakerWeave adds, dropouts, and how busy the PC
+is as a whole. A chart shows the last two minutes (point at it to read a moment), and a list
+shows how every output is keeping up.
+
+## Microphones
+
+Every microphone of the PC is listed under **Microphones** at the bottom of the list on the
+left. Tick one and it appears on the room map in front of you: drag it to where it really is
+around your setup. It glows with what it hears, and clicking it shows how far it is from you
+and in which direction. Right click it to rename it, untick it, or take it off the map. Only
+the microphones you tick are opened, and only to show their level: nothing is recorded.
+
 ## Hearing one speaker
 
 Right click a speaker on the map and choose a short noise or a sweep from low to high, or
 select it and press Space, or use **Test sound**. This works even while the sound is
 stopped: SpeakerWeave starts it for the test and stops it again. The sweep is the easiest
 way to hear where a speaker's frequency limits are.
+
+**Test sound** also has two sweeps that use every speaker:
+
+* **Sweep round the room (360°)**: a sound goes round you clockwise from straight ahead,
+  twice, gliding from speaker to speaker
+* **Sweep from left to right (front speakers)**: the sound glides across the speakers in
+  front of you and back, twice
+
+A sweep should move smoothly. A jump, a gap or a speaker that stands out points at its place
+on the map, its volume or its delay. The PC sound waits while a sweep plays.
+
+### Mute and solo
+
+**Mute** takes a speaker out of the system: what it would have played moves to the nearest
+speakers that are still playing, so nothing goes missing from the music. **Solo** plays the
+whole sound on the soloed speakers only (one soloed speaker gets everything, no louder than
+one channel), which is the quickest way to hear what a single speaker adds.
 
 ### Your own test sounds
 
@@ -334,7 +393,8 @@ wheel of a mouse or headset and the Windows volume slider turn your speakers up 
 and muting Windows mutes them. **Follow the Windows volume and mute** switches this off.
 
 **Make SpeakerWeave the main sound output of Windows** is on from the start. While the sound
-plays, Windows plays into the device SpeakerWeave listens to (for example CABLE Input). If
+plays, Windows plays into the device SpeakerWeave listens to (SpeakerWeave Virtual Speaker
+output). If
 Listen to is still on the test signal, a virtual sound device is picked for you. With
 **Start SpeakerWeave when Windows starts** on as well (the installer offers it), this happens
 each time the PC boots. When the sound stops or SpeakerWeave quits, Windows goes back to the
@@ -373,6 +433,11 @@ you. Change the numbers, or drag the two orange lines in the graph, to taste. Th
 On the **Sound** tab, **Send the bass of every channel to the subwoofer as well** makes the
 subwoofer useful for stereo music too, not only for the dedicated bass channel of films
 and games.
+
+**Nothing below** hands a speaker's lowest notes to the subwoofer. While no subwoofer is
+playing, those notes would simply be lost and the sound turns thin, so the limit waits until
+there is one (the Speaker tab says so). **No subwoofer playing: every speaker keeps its lows**
+on the Sound tab switches this off.
 
 ## Equaliser
 
@@ -452,6 +517,9 @@ Start with the **Errors** page: it names the problem and usually has a button th
 | Crackles or dropouts | Raise the Safety buffer. Close heavy programs |
 | Echo between two screens | Use Extra delay on the earlier one |
 | The list has no "Everything this PC plays on" entries | Run Install.bat again, the PyAudioWPatch library is missing |
+| A setup cannot be saved where you chose | Windows' Controlled folder access protects Documents and OneDrive. SpeakerWeave saves it in its own Setups folder instead and says where |
+| The sound is thin or tinny | A speaker's **Nothing below** cut is on with no subwoofer playing. Keep **No subwoofer playing: every speaker keeps its lows** ticked on the Sound tab |
+| Mute or solo sounds odd | Speakers on different outputs can be out of step. Use **Easy sync** under the map |
 
 ## What has been tested
 
@@ -474,6 +542,10 @@ were written without access to your hardware, so expect to report a rough edge o
 * `speakerweave/windefault.py` and `default_output.py` the Windows default sound output, and
   setting the virtual device to 7.1
 * `speakerweave/soundcheck.py` the checks behind the Errors page
+* `speakerweave/cable.py` the name of the virtual device in Windows
+* `speakerweave/media.py` what is playing on the PC, and its play, pause and skip
+* `speakerweave/mics.py` microphone levels for the room map
+* `speakerweave/perf.py` processor and memory use for the Performance page
 * `speakerweave/remote.py` the links for Stream Deck and the SimHub plugin
 * `speakerweave/simhub.py` finding SimHub and installing the plugin
 * `speakerweave/uninstall.py` removing SpeakerWeave from the PC

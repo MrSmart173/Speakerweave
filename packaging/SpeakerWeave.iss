@@ -199,9 +199,12 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Value, Usual: String;
+  ResultCode: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
+    { VB-CABLE stays installed: give its output back its own name, "CABLE Input" }
+    Exec(ExpandConstant('{app}\{#AppExe}'), '--unbrand', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     { the app itself may have added SpeakerWeave to the Windows start list }
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}');
     RemoveSimHubPlugin();

@@ -8,8 +8,8 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QMenu, QPushButton, QToolTip, QWidget
 
 from ..model import (OFF, REAL_SPEAKERS, ROLE_ANGLES, ROLE_COLORS, ROLE_NAMES, ROLE_SHORT, can_move_alone, is_shape,
-                     is_sub, face_listener, move_speaker, set_attached, shape_role, speaker_angle,
-                     speaker_distance, speaker_position)
+                     is_sub, face_listener, move_speaker, set_attached, shape_role, speaker_distance,
+                     speaker_position)
 from . import theme
 
 PAD = 44          # pixels around the room
@@ -28,6 +28,8 @@ class RoomMap(QWidget):
         super().__init__()
         self.state = state
         self.levels: dict[str, float] = {}
+        self.mic_levels: dict[str, float] = {}      # how loud each microphone hears, 0 to 1
+        self.sel_mic = ""                           # the microphone clicked last
         self.clipped: set[str] = set()
         self.test_role = ""
         self._drag = None           # (kind, device, speaker, offset x, offset y)
@@ -174,6 +176,9 @@ class RoomMap(QWidget):
         if sel is not None and sel.kind == "builtin" and not is_shape(sel) \
                 and _dist(pos, self._handle(sel)) <= 11:
             return ("turn", sel, None)
+        for mic in reversed(proj.mics):
+            if _dist(pos, self.to_px(mic.x, mic.y)) <= R:
+                return ("mic", None, mic)
         # the middle of a badge wins over the rim of a neighbour
         for dev in reversed(proj.devices):
             for spk in reversed(dev.speakers):
@@ -207,11 +212,20 @@ class RoomMap(QWidget):
             return
         pos = ev.position()
         hit = self._hit(pos)
+        if hit is None or hit[0] != "mic":
+            self.sel_mic = ""
         if hit is None:
             self.state.select("", "")
             return
         kind, dev, spk = hit
         mx, my = self.to_m(pos)
+        if kind == "mic":
+            self.state.select("", "")
+            self.sel_mic = spk.id
+            self._drag = ("mic", None, spk, mx - spk.x, my - spk.y)
+            self.setCursor(Qt.ClosedHandCursor)
+            self.update()
+            return
         if kind == "listener":
             p = self.state.project
             self._drag = ("listener", None, None, mx - p.listener_x, my - p.listener_y)
@@ -263,6 +277,9 @@ class RoomMap(QWidget):
         mx, my = self.to_m(pos)
         if kind == "listener":
             proj.listener_x, proj.listener_y = self._clamp(mx - ox, my - oy, snap)
+        elif kind == "mic":
+            x, y = self._clamp(mx - ox, my - oy, snap)
+            spk.x, spk.y = round(x, 3), round(y, 3)
         elif kind == "speaker":
             x, y = self._clamp(mx - ox, my - oy, snap)
             move_speaker(dev, spk, x, y, proj.mirror)
@@ -303,6 +320,19 @@ class RoomMap(QWidget):
 
     def contextMenuEvent(self, ev):
         hit = self._hit(QPointF(ev.pos()))
+        if hit is not None and hit[0] == "mic":
+            mic = hit[2]
+            self.sel_mic = mic.id
+            self.update()
+            menu = QMenu(self)
+            menu.addSection(mic.title)
+            menu.addAction("Rename...", lambda: self.rename_mic(mic))
+            tick = menu.addAction("Use this microphone", lambda: self._toggle_mic(mic))
+            tick.setCheckable(True)
+            tick.setChecked(mic.enabled)
+            menu.addAction("Remove from the map", lambda: self.state.remove_mic(mic.id))
+            menu.exec(ev.globalPos())
+            return
         if hit is None or hit[1] is None:
             return
         kind, dev, spk = hit
@@ -346,6 +376,18 @@ class RoomMap(QWidget):
                 menu.addAction("Turn to face me", lambda: (face_listener(state.project, dev),
                                                            state.touch_layout()))
         menu.exec(ev.globalPos())
+
+    def rename_mic(self, mic) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(self, "Rename the microphone", f"Name for {mic.name}:",
+                                        text=mic.label or mic.name)
+        if ok:
+            mic.label = "" if text.strip() in ("", mic.name) else text.strip()
+            self.state.mics_changed()
+
+    def _toggle_mic(self, mic) -> None:
+        mic.enabled = not mic.enabled
+        self.state.mics_changed()
 
     def _set_role(self, spk, role) -> None:
         self.state.project.set_role(spk, role)
@@ -426,11 +468,16 @@ class RoomMap(QWidget):
         sel_dev, sel_spk = self.state.selected_speaker()
         if sel_spk is not None:
             self._paint_measure(p, sel_dev, sel_spk, small)
+        sel_mic = proj.find_mic(self.sel_mic) if self.sel_mic else None
+        if sel_mic is not None:
+            self._paint_measure_to(p, (sel_mic.x, sel_mic.y), small)
         any_solo = any(s.solo for d in proj.devices if d.enabled for s in d.speakers)
         for dev in proj.devices:
             for spk in dev.speakers:
                 self._paint_speaker(p, dev, spk, bold, small, any_solo)
         self._paint_edge_arrows(p)
+        for mic in proj.mics:
+            self._paint_mic(p, mic, small)
         self._paint_listener(p, small)
 
         p.setFont(small)
@@ -602,15 +649,20 @@ class RoomMap(QWidget):
         p.setOpacity(1.0)
 
     def _paint_measure(self, p, dev, spk, font):
+        self._paint_measure_to(p, speaker_position(dev, spk), font)
+
+    def _paint_measure_to(self, p, where, font):
+        """A dashed line from you to a thing on the map, with its distance and direction."""
         proj = self.state.project
         a = self.to_px(proj.listener_x, proj.listener_y)
-        b = self.to_px(*speaker_position(dev, spk))
+        b = self.to_px(*where)
         p.setPen(QPen(theme.faint(70), 1, Qt.DashLine))
         p.drawLine(a, b)
-        angle = speaker_angle(proj, dev, spk)
+        dx, dy = where[0] - proj.listener_x, where[1] - proj.listener_y
+        angle = math.degrees(math.atan2(dx, -dy))
         side = "ahead" if abs(angle) < 1 else ("behind" if abs(angle) > 179 else
                                                  ("right" if angle > 0 else "left"))
-        text = f"{speaker_distance(proj, dev, spk):.2f} m,  {abs(angle):.0f}° {side}"
+        text = f"{math.hypot(dx, dy):.2f} m,  {abs(angle):.0f}° {side}"
         mid = QPointF((a.x() + b.x()) / 2, (a.y() + b.y()) / 2)
         p.setFont(font)
         tw = p.fontMetrics().horizontalAdvance(text) + 10
@@ -622,6 +674,38 @@ class RoomMap(QWidget):
         p.drawRoundedRect(box, 4, 4)
         p.setPen(QColor(theme.TEXT))
         p.drawText(box, Qt.AlignCenter, text)
+
+    def _paint_mic(self, p, mic, font):
+        """A microphone: a round badge with a microphone drawn in it, glowing with what it
+        hears, and its name underneath."""
+        c = self.to_px(mic.x, mic.y)
+        selected = self.sel_mic == mic.id
+        p.save()
+        p.setOpacity(1.0 if mic.enabled else 0.45)
+        level = self.mic_levels.get(mic.id, 0.0) if mic.enabled else 0.0
+        if level > 0.02:
+            glow = QColor(theme.ACCENT)
+            glow.setAlpha(int(40 + 110 * level))
+            p.setPen(Qt.NoPen)
+            p.setBrush(glow)
+            p.drawEllipse(c, R + 3 + 13 * level, R + 3 + 13 * level)
+        p.setPen(QPen(QColor(theme.ACCENT) if selected else QColor(theme.BADGE_EDGE), 2 if selected else 1.5))
+        p.setBrush(QColor(theme.PANEL_2))
+        p.drawEllipse(c, R - 1, R - 1)
+        ink = QColor(theme.TEXT)
+        p.setPen(Qt.NoPen)
+        p.setBrush(ink)
+        p.drawRoundedRect(QRectF(c.x() - 3.2, c.y() - 8.0, 6.4, 10.0), 3.2, 3.2)    # the capsule
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(ink, 1.4))
+        p.drawArc(QRectF(c.x() - 5.5, c.y() - 4.5, 11.0, 9.0), 180 * 16, 180 * 16)  # the holder
+        p.drawLine(QPointF(c.x(), c.y() + 4.5), QPointF(c.x(), c.y() + 7.0))         # the stand
+        p.drawLine(QPointF(c.x() - 3.5, c.y() + 7.5), QPointF(c.x() + 3.5, c.y() + 7.5))
+        p.setFont(font)
+        title = mic.title if len(mic.title) <= 22 else mic.title[:21] + "\u2026"
+        p.setPen(QColor(theme.TEXT) if selected else QColor(theme.DIM))
+        p.drawText(QRectF(c.x() - 80, c.y() + R + 2, 160, 16), Qt.AlignCenter, title)
+        p.restore()
 
     def _paint_speaker(self, p, dev, spk, bold, small, any_solo=False):
         pos = self.to_px(*speaker_position(dev, spk))

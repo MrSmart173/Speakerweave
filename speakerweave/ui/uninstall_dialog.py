@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
                                QVBoxLayout)
 
-from .. import simhub, uninstall
+from .. import cable, simhub, uninstall
 from ..uninstall import Feedback
 from .panels import dim
 from .state import config_dir
@@ -110,6 +110,7 @@ def start_uninstall(window) -> bool:
     was_running = state.runner.running
     state.stop(keep_windows=True)
     uninstall.hand_back_windows_output(state.settings, state.project)
+    cable.unbrand()                       # VB-CABLE stays: its output is CABLE Input again
     state.save_settings()
 
     if uninstaller:
