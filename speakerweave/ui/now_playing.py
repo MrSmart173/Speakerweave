@@ -43,7 +43,7 @@ def _art(data: bytes, size: int) -> QPixmap:
 
 def icon(kind: str, size: int = 16) -> QIcon:
     """Drawn rather than taken from a font, so they look the same on every PC and theme:
-    "previous", "play", "pause", "next" or "close"."""
+    "previous", "play", "pause", "next", "close", "plus" or "minus"."""
     scale = 3                                   # drawn large, so it stays sharp when scaled
     side = size * scale
     pix = QPixmap(side, side)
@@ -68,6 +68,13 @@ def icon(kind: str, size: int = 16) -> QIcon:
     elif kind == "previous":
         tri([(13.5, 3), (6.5, 8), (13.5, 13)])
         p.drawRoundedRect(QRectF(3 * s, 3 * s, 2.5 * s, 10 * s), 0.8 * s, 0.8 * s)
+    elif kind in ("plus", "minus"):
+        pen = QPen(ink, 1.8 * s)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(3.5 * s, 8 * s), QPointF(12.5 * s, 8 * s))
+        if kind == "plus":
+            p.drawLine(QPointF(8 * s, 3.5 * s), QPointF(8 * s, 12.5 * s))
     elif kind == "close":
         pen = QPen(ink, 1.8 * s)
         pen.setCapStyle(Qt.RoundCap)

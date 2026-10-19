@@ -79,6 +79,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 Name: "startup"; Description: "Start SpeakerWeave when Windows starts, so the PC plays through your speakers from the moment it boots"; GroupDescription: "Starting:"
+Name: "launch"; Description: "Open SpeakerWeave as soon as it is installed"; GroupDescription: "Starting:"
 #ifdef WithVbCable
 Name: "vbcable"; Description: "Install the VB-CABLE virtual sound device by VB-Audio (lets SpeakerWeave receive everything this PC plays)"; GroupDescription: "Virtual sound device:"; Check: not VbCablePresent
 #endif
@@ -103,8 +104,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 ; VB-CABLE is a donationware, all participations are welcome. https://vb-audio.com/Cable/
 Filename: "{app}\VBCABLE\VBCABLE_Setup_x64.exe"; StatusMsg: "Opening the VB-CABLE driver setup. Press Install Driver in its window..."; Verb: runas; Flags: shellexec waituntilterminated skipifsilent; Tasks: vbcable
 #endif
-; first install: offer to start the app on the last page
-Filename: "{app}\{#AppExe}"; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
+; opens the app as soon as the files are in place, when "Open SpeakerWeave as soon as it is
+; installed" stays ticked. As the person who ran the installer, never as administrator.
+Filename: "{app}\{#AppExe}"; StatusMsg: "Opening SpeakerWeave..."; Flags: nowait runasoriginaluser skipifsilent; Tasks: launch
 ; update started from inside the app: start the new version again without asking
 Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: WizardSilent
 

@@ -203,6 +203,7 @@ QLabel#subtitle {{ font-weight: 700; }}
 QLabel#warn {{ color: {WARN}; }}
 QPushButton#danger {{ color: {BAD}; border-color: {BAD}; }}
 QPushButton#mapRow {{ padding: 5px 8px; }}
+QPushButton#nav {{ padding: 5px 9px; }}
 QPushButton#danger:hover {{ background: {BAD}; color: #ffffff; }}
 QStatusBar {{ background: {PANEL}; color: {DIM}; }}
 QSplitter::handle {{ background: {BG}; width: 6px; }}

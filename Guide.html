@@ -22,7 +22,13 @@ shape its sound.</p>
 <li>4.0, 4.1, 5.0 and 5.1 with the surround pair at your sides (SL SR) or behind you (RL RR)</li>
 <li>Custom: tick any combination of positions, with up to four subwoofers</li>
 <li>Any channel of any output can play any role. Several speakers may share a role</li>
-<li>Room map: drag screens, loose speakers and your own seat to where they really are</li>
+<li>Room map: drag screens, loose speakers and your own seat to where they really are. It zooms
+  itself to fit your speakers, from a desk monitor half a metre away to a rig two metres wide,
+  and keeps every distance true</li>
+<li>A Fun page of sound effects: bass boost, chipmunk or deep voice, robot, distortion,
+  telephone, underwater, echo, stadium, 8 bit, karaoke and the whole sound spinning round the
+  room. Each one on or off, or for a set time, from its card, a key, a controller button or a
+  Stream Deck</li>
 <li>Drag the rim of a single speaker to move it along one direction, with an optional Mirror
   mode that moves its partner on the other side to match</li>
 <li>Roles can be filled in for you from the positions on the map</li>
@@ -78,7 +84,10 @@ shape its sound.</p>
 <h2>Installing (Windows 10 or 11)</h2>
 <p><strong>With the installer.</strong> Run <code>SpeakerWeave-Setup-Beta-v1.0.exe</code> (or the newest one on the
 <a href="https://github.com/MrSmart173/Speakerweave/releases">Releases page</a>), choose where to install, and
-start SpeakerWeave from the Start menu. Nothing else is needed. The app looks for newer
+start SpeakerWeave from the Start menu, or leave <strong>Open SpeakerWeave as soon as it is
+installed</strong> ticked and it opens by itself. Nothing else is needed. The title bar shows when
+the copy you are running was built (or "from source" when it runs from this folder), so it
+is easy to tell an old installation from a new one. The app looks for newer
 versions by itself when it opens and every six hours. When one is out, a note appears by the
 <strong>Errors</strong> button and the Errors page lists it under <strong>Notices</strong>, with what's new and a
 button that installs it. <strong>Setup &gt; Check for updates</strong> looks right away.</p>
@@ -103,7 +112,13 @@ time from <strong>Setup &gt; Take the tour</strong>.</p>
 <li>Pick the <strong>Mode</strong> at the top (for example 5.1), or press <strong>Positions</strong> to tick exactly
    the speaker positions your room has (see below).</li>
 <li>Drag the screens and the <strong>You</strong> marker to where they are in your room. Scroll over a
-   screen to turn it. The faint ring around you shows the ideal spot for each role.</li>
+   screen to turn it. The faint ring around you shows the ideal spot for each role.
+   The map zooms itself so everything fits (<strong>Fit</strong> is lit), also when the window changes
+   size: speakers half a metre away spread out as much as a rig two metres wide. The zoom
+   buttons in its top left corner, the mouse wheel over an empty spot (or Ctrl and the wheel
+   anywhere), and the + and − keys zoom by hand. Distances never change, only how big the
+   map is drawn. <strong>100%</strong> shows the whole room, and <strong>Fit</strong> turns fitting back on. In a window
+   too small for everything, scroll bars appear at the bottom and right.</li>
 <li>Press <strong>Set roles</strong>, or click each speaker and choose its <strong>Role</strong> by hand.</li>
 <li>Leave <strong>Listen to</strong> on <strong>Test signal</strong> and press <strong>Start</strong>. A noise walks from channel to
    channel, and the speaker that should be playing gets a white ring on the map. If the wrong
@@ -294,6 +309,84 @@ processor and of the memory, how much of each block's time the sound work takes 
 the sound can start to break up), the delay SpeakerWeave adds, dropouts, and how busy the PC
 is as a whole. A chart shows the last two minutes (point at it to read a moment), and a list
 shows how every output is keeping up.</p>
+<h2>Fun</h2>
+<p>The <strong>Fun</strong> page has sound effects for everything the PC plays:</p>
+<table>
+<thead>
+<tr>
+<th>Effect</th>
+<th>What it does</th>
+<th>The slider</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bass boost</td>
+<td>lifts the low notes</td>
+<td>how many dB</td>
+</tr>
+<tr>
+<td>Chipmunk or deep voice</td>
+<td>moves every note up or down, the speed stays the same</td>
+<td>semitones, up or down</td>
+</tr>
+<tr>
+<td>Robot</td>
+<td>turns voices into a robot's</td>
+<td>the buzz</td>
+</tr>
+<tr>
+<td>Distortion</td>
+<td>a speaker turned up far too loud</td>
+<td>the drive</td>
+</tr>
+<tr>
+<td>Telephone</td>
+<td>thin and tinny, like a phone call</td>
+<td>crackle, for a bad line</td>
+</tr>
+<tr>
+<td>Underwater</td>
+<td>muffled and wobbly</td>
+<td>how deep</td>
+</tr>
+<tr>
+<td>Echo</td>
+<td>every sound comes back, quieter each time</td>
+<td>the delay</td>
+</tr>
+<tr>
+<td>Stadium</td>
+<td>a huge hall that rings on</td>
+<td>the size</td>
+</tr>
+<tr>
+<td>8 bit</td>
+<td>crunchy, like an old games console</td>
+<td>how many bits</td>
+</tr>
+<tr>
+<td>Karaoke</td>
+<td>takes the singer out of most stereo songs</td>
+<td>how much</td>
+</tr>
+<tr>
+<td>Spin round the room</td>
+<td>the whole sound circles round you through every speaker</td>
+<td>how fast</td>
+</tr>
+</tbody>
+</table>
+<p>Press <strong>Off</strong> on a card to switch it on until you switch it off, or <strong>Play for</strong> to switch it
+on for the seconds next to it (pressing it again starts the time again). Several can play at
+once, and <strong>Stop every effect</strong> switches them all off. Each card can have a key for on or
+off and a key for its timed run, which work everywhere, also while a game is in front. The
+Controls page has the same actions for controller, wheel and button box buttons, and links
+for a Stream Deck. The <strong>Fun</strong> button shows how many effects are playing.</p>
+<p>The effects change the PC sound only: test sounds, sweeps and extra sources such as SimHub
+effects stay as they are. Each one fades in and out, so nothing clicks, and while any of them
+plays SpeakerWeave keeps the sound from overloading. Effects start off every time
+SpeakerWeave opens, and the sliders and times are remembered.</p>
 <h2>Microphones</h2>
 <p>Every microphone of the PC is listed under <strong>Microphones</strong> at the bottom of the list on the
 left. Tick one and it appears on the room map in front of you: drag it to where it really is
@@ -427,8 +520,35 @@ them up so every speaker's sound reaches your seat together.</p>
   0 ms, the least delay possible: SpeakerWeave then keeps only the room your sound cards
   need to play cleanly (about 20 to 25 ms for most), and adds a few milliseconds by itself if
   one runs dry. All outputs keep the same delay, so they stay in line. The status line at the
-  bottom shows the delay in use. Raise the buffer only if you still hear crackles.</li>
+  bottom shows the delay in use. Raise the buffer only if you still hear crackles. Room added
+  after a hiccup is given back a millisecond at a time while everything plays cleanly.</li>
 </ul>
+<h3>Keeping the delay as low as it goes</h3>
+<p>For games, every millisecond counts. The <strong>Delay</strong> tile on the Performance page adds up what
+SpeakerWeave and Windows' buffers cost, and says where it comes from: <strong>listening</strong> (Windows
+handing over the PC sound), <strong>buffer</strong> (the room kept so no output runs dry), <strong>output</strong> (the
+slowest output's buffer) and <strong>lining up speakers</strong> (the most delay a speaker was given so
+it reaches you together with the others). Each device adds its own lag inside on top, and
+screens and TVs are slow: their speakers often take 20 to 80 ms, and because every speaker
+waits for the slowest one, that one sets the delay of the whole setup.</p>
+<ul>
+<li>Tick <strong>Lowest delay: use each output on its own</strong> on the Sound tab. SpeakerWeave then plays
+  straight to each output, past Windows' sound mixer and its buffer (WASAPI exclusive mode),
+  which takes several milliseconds off every output. While the sound runs, other programs
+  cannot play on those outputs. An output that does not allow it plays through Windows as
+  before, and the Errors page says which.</li>
+<li>Run the virtual device at <strong>48 kHz</strong>. At 96 or 192 kHz every sound is converted up and back
+  down again, which costs processor time and delay for no better sound. The Errors page offers
+  a button when it runs faster.</li>
+<li>When every speaker has some delay in common (from Easy sync, Line up delays or Extra
+  delay), it only makes everything later. The Errors page offers to take it off, and Line up
+  delays leaves the latest speaker at 0 ms.</li>
+<li>Put the TV or monitor in game mode, and prefer outputs with little lag of their own, such
+  as a sound card or USB DAC with speakers, over the speakers in a screen.</li>
+</ul>
+<p>Delay testers in a web browser measure the browser's own delay and your tapping too. To see
+what SpeakerWeave adds, run the test once with SpeakerWeave stopped (Windows plays straight to
+one output) and once with it running, on the same speakers.</p>
 <h2>Lights</h2>
 <p>RGB hardware is driven through OpenRGB (free, <a href="https://openrgb.org">https://openrgb.org</a>), which supports most
 motherboard headers, LED controllers and RGB peripherals.</p>
@@ -534,6 +654,7 @@ were written without access to your hardware, so expect to report a rough edge o
 <li><code>speakerweave/media.py</code> what is playing on the PC, and its play, pause and skip</li>
 <li><code>speakerweave/mics.py</code> microphone levels for the room map</li>
 <li><code>speakerweave/perf.py</code> processor and memory use for the Performance page</li>
+<li><code>speakerweave/fun.py</code> the sound effects of the Fun page</li>
 <li><code>speakerweave/remote.py</code> the links for Stream Deck and the SimHub plugin</li>
 <li><code>speakerweave/simhub.py</code> finding SimHub and installing the plugin</li>
 <li><code>speakerweave/uninstall.py</code> removing SpeakerWeave from the PC</li>

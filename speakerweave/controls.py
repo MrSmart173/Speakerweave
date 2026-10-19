@@ -42,13 +42,24 @@ STATIC_ACTIONS = [
 ] + [Action(f"slot_{n}", f"Load setup slot {n}", "Setups") for n in range(1, SETUP_SLOTS + 1)]
 
 
+def fun_actions() -> list:
+    """Each sound effect for fun: on or off, and on for its set time. And all of them off."""
+    from .fun import EFFECTS
+    out = []
+    for effect in EFFECTS:
+        out.append(Action(f"fun:{effect.key}", f"{effect.name} on or off", "Fun"))
+        out.append(Action(f"fun_for:{effect.key}", f"{effect.name} for its set time", "Fun"))
+    out.append(Action("fun_stop", "Stop every sound effect", "Fun"))
+    return out
+
+
 def output_actions(project) -> list:
     return [Action(f"mute_output:{dev.id}", f"Mute or unmute {dev.title}", "Outputs")
             for dev in project.devices]
 
 
 def all_actions(project) -> list:
-    return STATIC_ACTIONS + output_actions(project)
+    return STATIC_ACTIONS + fun_actions() + output_actions(project)
 
 
 def label_of(action_key: str, project) -> str:

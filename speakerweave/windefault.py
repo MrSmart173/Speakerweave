@@ -225,11 +225,11 @@ def _read_format(pointer_value) -> dict:
     return fmt
 
 
-def _make_format(fmt: dict, channels: int) -> WAVEFORMATEXTENSIBLE:
+def _make_format(fmt: dict, channels: int, rate: int = 0) -> WAVEFORMATEXTENSIBLE:
     w = WAVEFORMATEXTENSIBLE()
     w.wFormatTag = EXTENSIBLE
     w.nChannels = channels
-    w.nSamplesPerSec = fmt["rate"]
+    w.nSamplesPerSec = int(rate or fmt["rate"])
     w.wBitsPerSample = fmt["bits"]
     w.nBlockAlign = channels * fmt["bits"] // 8
     w.nAvgBytesPerSec = w.nSamplesPerSec * w.nBlockAlign
@@ -310,10 +310,11 @@ def layout(device_id: str) -> dict:
     return out
 
 
-def set_channels(device_id: str, channels: int = 8) -> None:
+def set_channels(device_id: str, channels: int = 8, rate: int = 0) -> None:
     """Sets an output to stereo (2), 5.1 (6) or 7.1 (8), like Configure in the
     Sound control panel does. Used for the virtual device SpeakerWeave listens
-    to, so games send it real surround sound."""
+    to, so games send it real surround sound. rate: also its sample rate, as the
+    Advanced tab of its Properties sets it (0 leaves the rate as it is)."""
     if not supported():
         raise RuntimeError("Only Windows has sound outputs to set up.")
     with Apartment() as com:
@@ -324,8 +325,8 @@ def set_channels(device_id: str, channels: int = 8) -> None:
                 device_id, 0, byref(device_fmt))
             method(policy, 3, HRESULT, ctypes.c_wchar_p, POINTER(c_void_p))(device_id, byref(mix_fmt))
             try:
-                endpoint = _make_format(_read_format(device_fmt.value), channels)
-                mix = _make_format(_read_format(mix_fmt.value), channels)
+                endpoint = _make_format(_read_format(device_fmt.value), channels, rate)
+                mix = _make_format(_read_format(mix_fmt.value), channels, rate)
             finally:
                 com.free(device_fmt)
                 com.free(mix_fmt)

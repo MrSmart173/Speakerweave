@@ -45,6 +45,17 @@ def _duration(seconds: float) -> str:
     return f"{h} h {m} min" if h else (f"{m} min {s} s" if m else f"{s} s")
 
 
+def delay_note(runner) -> str:
+    """Where the delay comes from, in a line: "listening 10, buffer 8, output 12, speakers 3 ms"."""
+    parts = runner.delay_parts()
+    names = (("listening", "listening"), ("buffer", "buffer"), ("output", "output"),
+             ("speakers", "lining up speakers"))
+    text = ", ".join(f"{label} {parts[key]:.0f}" for key, label in names if parts[key] >= 0.5) + " ms"
+    if runner.exclusive:
+        text += f". {len(runner.exclusive)} of {len(runner.fifos)} outputs on their own"
+    return text
+
+
 class _Tile(QFrame):
     """One headline number with a line underneath that says what it means."""
 
@@ -234,7 +245,11 @@ class PerformancePage(QWidget):
         self.load = _Tile("Sound work", "How much of each block's time the sound work takes. "
                           "Above 70% the sound can start to break up.")
         self.delay = _Tile("Delay", "How far behind the PC your speakers play because of "
-                           "SpeakerWeave itself (each device adds its own on top)")
+                           "SpeakerWeave and Windows' buffers: listening to the PC sound, the room "
+                           "kept so no output runs dry, the slowest output's buffer and the delay "
+                           "given to speakers to line them up. Each device adds its own inside on "
+                           "top (screens and TVs often 20 to 80 ms). Less: Lowest delay on the "
+                           "Sound tab, and the virtual device at 48 kHz.")
         self.dropouts = _Tile("Dropouts", "Moments an output ran out of sound since the sound started")
         self.pc = _Tile("Whole PC", "How busy the PC's processor is with everything together")
         for i, tile in enumerate((self.cpu, self.memory, self.load, self.delay, self.dropouts, self.pc)):
@@ -306,9 +321,7 @@ class PerformancePage(QWidget):
                     else "Close to the limit. Close heavy programs, or raise the Safety buffer "
                          "on the Sound tab.")
             self.load.show_value(f"{s['load']:.0f}%", note, warn=busy)
-            self.delay.show_value(f"{runner.delay_ms():.0f} ms",
-                                  f"blocks of {self.state.project.blocksize} samples at "
-                                  f"{getattr(self.state.engine, 'sr', 0) / 1000:.0f} kHz")
+            self.delay.show_value(f"{runner.delay_ms():.0f} ms", delay_note(runner))
             status = runner.status()
             drops = sum(g for _f, _p, g in status.values())
             self.dropouts.show_value(str(drops), "since the sound started" if drops == 0 else

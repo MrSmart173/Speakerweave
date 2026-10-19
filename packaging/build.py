@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import sys
 import tempfile
 
@@ -304,9 +305,19 @@ def build_exe() -> str:
     except ImportError:
         if run([sys.executable, "-m", "pip", "install", "--quiet", "pyinstaller"]) != 0:
             fail("could not download PyInstaller. Check the internet connection.")
-    code = run([sys.executable, "-m", "PyInstaller", os.path.join(HERE, "SpeakerWeave.spec"),
-                "--noconfirm", "--distpath", DIST, "--workpath", os.path.join(WORK, "build")],
-               cwd=ROOT)
+    stamp = os.path.join(ROOT, "speakerweave", "_build.py")
+    with open(stamp, "w", encoding="utf-8") as fh:      # when this copy was built, for the title bar
+        fh.write('"""Written by packaging/build.py while it builds, then removed again."""\n'
+                 f'BUILT = "{time.strftime("%d %b %Y, %H:%M")}"\n')
+    try:
+        code = run([sys.executable, "-m", "PyInstaller", os.path.join(HERE, "SpeakerWeave.spec"),
+                    "--noconfirm", "--distpath", DIST, "--workpath", os.path.join(WORK, "build")],
+                   cwd=ROOT)
+    finally:
+        try:
+            os.remove(stamp)                # running from the source code shows no build time
+        except OSError:
+            pass
     name = "SpeakerWeave.exe" if os.name == "nt" else "SpeakerWeave"
     exe = os.path.join(DIST, "SpeakerWeave", name)
     if code != 0 or not os.path.exists(exe):

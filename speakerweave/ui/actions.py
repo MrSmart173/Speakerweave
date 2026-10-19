@@ -76,6 +76,19 @@ class ActionRunner(QObject):
             win.toggle_visible()
         elif action.startswith("slot_"):
             message = self._load_slot(int(action.split("_")[1]))
+        elif action.startswith("fun:") or action.startswith("fun_for:"):
+            from ..fun import BY_KEY
+            key = action.split(":", 1)[1]
+            effect = BY_KEY.get(key)
+            if effect is not None:
+                if action.startswith("fun_for:"):
+                    seconds = state.fun_for(key)
+                    message = f"{effect.name} for {seconds:g} s"
+                else:
+                    message = f"{effect.name} " + ("on" if state.toggle_fun(key) else "off")
+        elif action == "fun_stop":
+            state.stop_fun()
+            message = "Every sound effect off"
         elif action.startswith("mute_output:"):
             dev = p.find_device(action.split(":", 1)[1])
             if dev is not None:

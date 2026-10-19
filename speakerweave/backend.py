@@ -14,11 +14,12 @@ import numpy as np
 
 from .dsp import PinkNoise
 from .engine import Engine, AdaptiveFifo
-from .model import Project
+from .model import OFF, Project
 
 MAX_SOURCE_CHANNELS = 8
 TEST_STEP_SECONDS = 1.2
 EXTRA_BUFFER_MS = 40.0      # how far behind an extra source runs, to absorb clock drift
+EXCLUSIVE_LATENCY_S = 0.006     # what an output used on its own is asked to buffer
 
 
 def _same_rate(rate: float, main: float) -> None:
@@ -158,12 +159,21 @@ class AudioRunner:
         self._last_real = 0.0
         self.test_role = ""         # role the test signal is playing right now
         self.callback_errors = 0
+        # where the delay comes from, as Windows reports it (seconds)
+        self.input_latency = 0.0
+        self.output_latency: dict = {}     # {device id: seconds}
+        self.exclusive: set = set()        # outputs SpeakerWeave has to itself right now
+        self.notes: list = []              # things worth knowing that are not problems
 
     # -------------------------------------------------------------- lifecycle
     def start(self) -> list[str]:
         """Starts everything. Returns a list of problems (empty = all good)."""
         self.stop()
         self.errors = []
+        self.notes = []
+        self.output_latency = {}
+        self.exclusive = set()
+        self.input_latency = 0.0
         self._stop.clear()
         p = self.project
         try:
@@ -194,18 +204,33 @@ class AudioRunner:
                                    f"(playing into it would cause an echo loop)")
                 continue
             channels_open = min(dev.channels, info.outputs)
-            fifo = AdaptiveFifo(dev.channels, sr, p.buffer_ms, block=p.blocksize)
-            try:
-                stream = sd.OutputStream(
-                    device=info.index, channels=channels_open, samplerate=sr,
-                    dtype="float32", latency="low", extra_settings=_extra(info),
-                    callback=self._make_output_callback(fifo, channels_open))
-                stream.start()
-            except Exception as exc:
-                self.errors.append(f"{dev.title}: {exc}")
-                continue
+            opened = None
+            if p.exclusive_outputs and info.wasapi:
+                try:
+                    opened = self._open_exclusive(sd, info, sr, channels_open, dev.channels)
+                    self.exclusive.add(dev.id)
+                except Exception:
+                    self.notes.append(f"{dev.title} could not be used on its own, so it plays "
+                                      f"through Windows' mixer (a few milliseconds later)")
+            if opened is None:
+                fifo = AdaptiveFifo(dev.channels, sr, p.buffer_ms, block=p.blocksize)
+                try:
+                    stream = sd.OutputStream(
+                        device=info.index, channels=channels_open, samplerate=sr,
+                        dtype="float32", latency="low", extra_settings=_extra(info),
+                        callback=self._make_output_callback(fifo, channels_open))
+                    stream.start()
+                except Exception as exc:
+                    self.errors.append(f"{dev.title}: {exc}")
+                    continue
+                opened = (stream, fifo)
+            stream, fifo = opened
             self.fifos[dev.id] = fifo
             self._streams.append(stream)
+            try:
+                self.output_latency[dev.id] = float(stream.latency)
+            except Exception:
+                self.output_latency[dev.id] = 0.0
 
         if not self.fifos:
             self.errors.append("No output device could be started")
@@ -225,6 +250,20 @@ class AudioRunner:
             self._filler_thread.start()
         self.running = True
         return self.errors
+
+    def _open_exclusive(self, sd, info, sr: float, channels_open: int, channels: int):
+        """Opens an output for SpeakerWeave alone (WASAPI exclusive mode). Windows' sound
+        mixer and its buffer are left out, which takes several milliseconds off. The output
+        plays at its own sample rate, the buffer converts. Raises when the device refuses."""
+        rate = float(info.samplerate or sr)
+        fifo = AdaptiveFifo(channels, sr, self.project.buffer_ms, block=self.project.blocksize,
+                            out_rate=rate)
+        stream = sd.OutputStream(
+            device=info.index, channels=channels_open, samplerate=rate, dtype="float32",
+            latency=EXCLUSIVE_LATENCY_S, extra_settings=sd.WasapiSettings(exclusive=True),
+            callback=self._make_output_callback(fifo, channels_open))
+        stream.start()
+        return stream, fifo
 
     def stop(self) -> None:
         self.running = False
@@ -321,15 +360,30 @@ class AudioRunner:
             if fifo.target != target:
                 fifo.set_target(target)
 
-    def delay_ms(self) -> float:
-        """How far the speakers play behind the PC sound arriving, from SpeakerWeave
-        itself (each device adds its own lag on top)."""
+    def delay_parts(self) -> dict:
+        """Where SpeakerWeave's delay comes from, in milliseconds: "listening" (Windows
+        handing over the PC sound), "buffer" (the room kept so no output runs dry, and the
+        block the engine works on), "output" (Windows' buffer of the slowest output) and
+        "speakers" (the most delay any playing speaker has been given to line it up)."""
         if not self.fifos:
-            return 0.0
+            return {"listening": 0.0, "buffer": 0.0, "output": 0.0, "speakers": 0.0}
         # on average a device has half of its own block still to play, and the engine
         # works one block at a time. The slowest device is the one you hear last.
-        return max((f.target + f._max_read / 2 + self.project.blocksize) * 1000.0 / f.sr
-                   for f in self.fifos.values())
+        buffer = max((f.target + f._max_read / 2 + self.project.blocksize) * 1000.0 / f.sr
+                     for f in self.fifos.values())
+        output = max(self.output_latency.values(), default=0.0) * 1000.0
+        p = self.project
+        speakers = max((d.trim_ms + s.delay_ms for d, s in p.all_speakers()
+                        if d.enabled and d.id in self.fifos and s.role != OFF), default=0.0)
+        return {"listening": self.input_latency * 1000.0, "buffer": buffer,
+                "output": output, "speakers": max(0.0, speakers)}
+
+    def delay_ms(self) -> float:
+        """How far the speakers play behind the PC sound arriving, from SpeakerWeave and
+        Windows' buffers (each device adds its own lag inside on top)."""
+        if not self.fifos:
+            return 0.0
+        return sum(self.delay_parts().values())
 
     def _fill_silence(self, sr: float, channels: int) -> None:
         """Windows sends nothing at all while nothing is playing. Then this keeps
@@ -439,6 +493,10 @@ class AudioRunner:
                 callback=lambda indata, frames, t, status: self._feed(indata))
             stream.start()
             self._streams.append(stream)
+            try:
+                self.input_latency = float(stream.latency)
+            except Exception:
+                self.input_latency = 0.0
         return sr, channels, opener
 
     def _prepare_loopback(self):
@@ -465,6 +523,10 @@ class AudioRunner:
                 format=pa.paFloat32, channels=total, rate=int(sr), input=True,
                 input_device_index=int(info["index"]), frames_per_buffer=p.blocksize,
                 stream_callback=on_audio)
+            try:
+                self.input_latency = float(self._pa_stream.get_input_latency())
+            except Exception:
+                self.input_latency = 0.0
         return sr, min(total, MAX_SOURCE_CHANNELS), opener
 
     def _start_test_signal(self) -> None:

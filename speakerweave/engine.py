@@ -6,6 +6,7 @@ keeps devices with slightly different clocks in step with each other.
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -13,8 +14,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from .dsp import SpeakerChain, PinkNoise, db_to_lin
+from .fun import FunChain, clean_amount
 from .mixer import build_matrix
-from .model import Project, OFF, is_shaker, is_sub, source_layout_for
+from .model import Project, OFF, ROLE_ANGLES, is_shaker, is_sub, source_layout_for
 
 
 @dataclass
@@ -48,6 +50,7 @@ class _Plan:
     # extra sources: {source id: matrix (speaker slots, its channels)}
     extras: dict = None
     slots: int = 0
+    room: list = None                   # the role of each row of the matrix
 
 
 SURROUND_HOLD_S = 3.0      # surround channels silent this long: treat the sound as stereo
@@ -61,6 +64,7 @@ SWEEPS = {"circle": (6.0, 2), "sides": (5.0, 2)}
 SWEEP_LEVEL = 0.22         # pink noise, a little under the level of the test sounds
 SWEEP_FADE_S = 0.25
 QUIET = 1e-4
+SPIN_FADE_S = 0.3
 
 class Engine:
     def __init__(self, project: Project):
@@ -110,6 +114,12 @@ class Engine:
         self._metro_active: list = []      # clicks still sounding: (speaker id, start, samples)
         self._click_cache: dict = {}
         self.block_count = 0           # goes up with every processed block
+        # sound effects for fun (fun.py): {effect key: amount}, replaced as a whole
+        self._fun: dict = {}
+        self.fun_chain = FunChain()
+        self._spin_angle = 0.0
+        self._spin_mix = 0.0
+        self._spin_period = 4.0
         self._guard = threading.Lock()
 
     # ---------------------------------------------------------- setup (UI thread)
@@ -203,7 +213,8 @@ class Engine:
                     extras[src.id] = mix
             self._plan = _Plan(matrix, devices, 0.0 if p.muted else db_to_lin(p.master_db),
                                stereo_matrix=stereo_matrix, extra_channels=extra,
-                               front_pair=front_pair, extras=extras, slots=len(targets))
+                               front_pair=front_pair, extras=extras, slots=len(targets),
+                               room=list(room))
             self._last_matrix = None
             self.output_peaks = {d.dev_id: np.zeros(d.channels) for d in devices}
 
@@ -416,6 +427,48 @@ class Engine:
         self._metro_clock = end
         return out
 
+    # ---------------------------------------------------------- sound effects for fun
+    def set_fun(self, active: dict) -> None:
+        """{effect key: amount} of the effects that should play now (see fun.py)."""
+        self._fun = {str(k): float(v) for k, v in dict(active).items()}
+
+    @property
+    def fun_active(self) -> dict:
+        return dict(self._fun)
+
+    def _rotation(self, room: list, points: list, angle: float) -> np.ndarray:
+        """A matrix that moves the sound of every speaker position round by angle degrees,
+        shared between the two positions either side of where it lands."""
+        r = np.eye(len(room))
+        for j, a in points:
+            r[:, j] = 0.0
+            for i, g in self._pan(a + angle, points, True).items():
+                r[i, j] += g
+        return r
+
+    def _spin(self, bus: np.ndarray, room: list, period) -> np.ndarray:
+        """Spin round the room: the finished mix turns round you, one turn every period s."""
+        n = len(bus)
+        points = [(i, ROLE_ANGLES[r]) for i, r in enumerate(room or []) if r in ROLE_ANGLES]
+        if len(points) < 2 or not n:
+            return bus
+        if period is not None:
+            self._spin_period = clean_amount("spin", period)
+        start = self._spin_angle
+        end = start + 360.0 * n / (self._spin_period * self.sr)
+        self._spin_angle = end % 360.0
+        step = n / (SPIN_FADE_S * self.sr)
+        mix0 = self._spin_mix
+        mix1 = min(1.0, mix0 + step) if period is not None else max(0.0, mix0 - step)
+        self._spin_mix = mix1
+        if mix1 == 0.0:
+            self._spin_angle = 0.0                      # the next spin starts in front
+        ramp = np.linspace(0.0, 1.0, n, endpoint=False)[:, None]
+        turned = (bus @ self._rotation(room, points, start).T) * (1.0 - ramp) + \
+            (bus @ self._rotation(room, points, end).T) * ramp
+        mix = np.linspace(mix0, mix1, n)[:, None]
+        return bus + (turned - bus) * mix
+
     def level(self, spk_id: str) -> float:
         chain = self.chains.get(spk_id)
         return chain.peak if chain else 0.0
@@ -439,6 +492,9 @@ class Engine:
             self.input_peaks = np.maximum(peaks, self.input_peaks * 0.9)
         else:
             self.input_peaks = peaks
+        fun = self._fun
+        if fun or self.fun_chain.busy:
+            x = self.fun_chain.process(x, fun, self.sr, self.source_roles)
         matrix = plan.matrix
         self._samples += n
         if plan.stereo_matrix is not None:
@@ -470,6 +526,8 @@ class Engine:
         else:
             bus = x @ matrix.T
         self._last_matrix = matrix
+        if "spin" in fun or self._spin_mix > 0.0:
+            bus = self._spin(bus, plan.room, fun.get("spin"))
 
         ident_id = self._identify_id if self._identify_left > 0 else ""
         noise = None
@@ -574,15 +632,21 @@ class AdaptiveFifo:
     MARGIN_S = 0.003     # room for the uneven timing of Windows, to start with
     MARGIN_STEP_S = 0.003    # more room after each time the device ran dry while sound flowed
     MARGIN_MAX_S = 0.04
+    CALM_S = 20.0        # this long without running dry: give back a millisecond of that room
+    GIVE_BACK_S = 0.001
 
     def __init__(self, channels: int, sr: float, target_ms: float, capacity_s: float = 1.5,
-                 block: int = 0):
+                 block: int = 0, out_rate: float = 0.0):
         """target_ms is the safety buffer chosen by the person. With block (the
         frames the engine writes at a time) the buffer never goes below what this
-        device needs to play cleanly (see need), so 0 ms means "as small as works"."""
+        device needs to play cleanly (see need), so 0 ms means "as small as works".
+        out_rate: the device plays at another sample rate than the engine works at (an
+        output used on its own, past Windows' mixer, which converts nothing for us)."""
         self.channels = channels
         self.sr = float(sr)
+        self.base = self.sr / float(out_rate) if out_rate else 1.0
         self.block = int(block)
+        self._calm = 0                       # frames played since the device last ran dry
         self._max_read = self.block          # until the device asks, guess its blocks match ours
         self._margin = int(self.MARGIN_S * sr) if self.block else 0
         self._last_write = 0.0
@@ -657,12 +721,13 @@ class AdaptiveFifo:
 
     def read(self, frames: int) -> np.ndarray:
         with self._lock:
-            if frames > self._max_read and self.block:
-                self._max_read = frames              # the device takes bigger blocks than guessed
+            used_frames = int(math.ceil(frames * self.base))   # in the engine's samples
+            if used_frames > self._max_read and self.block:
+                self._max_read = used_frames         # the device takes bigger blocks than guessed
             if not self._primed:
                 # with a block size the target is what is left after this read, so the
                 # fill is measured the same way from the very first block
-                keep = self.target + (frames if self.block else 0)
+                keep = self.target + (used_frames if self.block else 0)
                 if self._n < keep:
                     return np.zeros((frames, self.channels), dtype=np.float32)
                 self._drop(self._n - keep)          # same starting latency on every device
@@ -670,17 +735,26 @@ class AdaptiveFifo:
                 self._pos = 0.0
                 self._err = 0.0
                 self.ratio = 1.0 + self._learned
-            r = self.ratio
+            r = self.ratio * self.base
             last = self._pos + (frames - 1) * r
             if int(last) + 1 >= self._n:
                 self._primed = False
                 self.underruns += 1
+                self._calm = 0
                 # ran dry while sound was still arriving: this device needs more room.
                 # (When the PC simply stops sending, nothing is learned from it.)
                 if self.block and time.perf_counter() - self._last_write < 2.5 * self.block / self.sr:
                     self._margin = min(self._margin + int(self.MARGIN_STEP_S * self.sr),
                                        int(self.MARGIN_MAX_S * self.sr))
                 return np.zeros((frames, self.channels), dtype=np.float32)
+            # a long calm spell: the extra room one hiccup asked for is given back, a
+            # millisecond at a time, so a single stall does not cost delay for good
+            self._calm += used_frames
+            if self._calm >= self.CALM_S * self.sr:
+                self._calm = 0
+                base = int(self.MARGIN_S * self.sr)
+                if self._margin > base:
+                    self._margin = max(base, self._margin - int(self.GIVE_BACK_S * self.sr))
             idx = self._pos + np.arange(frames) * r
             i0 = idx.astype(np.int64)
             frac = (idx - i0).astype(np.float32)[:, None]
@@ -690,9 +764,9 @@ class AdaptiveFifo:
             self._pos = end - used
             self._drop(used)
             # slow control loop on the fill level
-            alpha = min(1.0, frames / (self.sr * self.TAU))
+            alpha = min(1.0, used_frames / (self.sr * self.TAU))
             self._err += alpha * ((self._n - self.target) - self._err)
-            learned = self._learned + self.KI * self._err * frames / self.sr
+            learned = self._learned + self.KI * self._err * used_frames / self.sr
             self._learned = min(max(learned, -self.MAX_CORR), self.MAX_CORR)
             corr = self.KP * self._err + self._learned
             self.ratio = 1.0 + min(max(corr, -self.MAX_CORR), self.MAX_CORR)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton,
@@ -110,6 +110,8 @@ class PadCaptureDialog(QDialog):
 # ======================================================================= the page
 
 class ControlsPage(QWidget):
+    bindingsChanged = Signal()          # a key or button was given to an action, or taken away
+
     def __init__(self, state, window):
         super().__init__()
         self.state = state
@@ -301,6 +303,7 @@ class ControlsPage(QWidget):
         self.state.save_settings()
         failed = self.window.apply_hotkeys()
         self._fill_table()
+        self.bindingsChanged.emit()
         if failed:
             QMessageBox.warning(self, "Controls", "Another program already uses: " + ", ".join(failed) +
                                 "\n\nChoose a different key for that action.")

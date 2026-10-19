@@ -312,6 +312,9 @@ class Project:
     source_layout: str = "auto"
     blocksize: int = 480
     buffer_ms: float = 0.0      # extra safety buffer. 0: as little delay as the devices allow
+    # the lowest delay: each output is used by SpeakerWeave alone (WASAPI exclusive mode),
+    # past the Windows sound mixer, which saves that mixer's own buffer on every output
+    exclusive_outputs: bool = False
     upmix: bool = True
     # while no subwoofer plays, a speaker's "Nothing below" cut is left out: the lows it
     # would hand to a subwoofer have nowhere else to go, and cutting them sounds thin
@@ -323,6 +326,8 @@ class Project:
     muted: bool = False         # everything silent (Mute action)
     room_w: float = 5.0
     room_h: float = 5.0
+    map_zoom: float = 1.0       # how far the room map is zoomed in (1: the whole room)
+    map_auto: bool = True       # the map zooms itself to keep everything in view
     listener_x: float = 0.0
     listener_y: float = 0.5
     rgb_host: str = "127.0.0.1"
@@ -915,6 +920,30 @@ def auto_assign_roles(proj: Project) -> int:
 SPEED_OF_SOUND = 343.0
 
 
+def common_delay(proj: Project) -> float:
+    """The delay every playing speaker has (its own delay plus its output's Extra delay).
+    It only makes everything later: taking it off all of them changes nothing else."""
+    totals = [d.trim_ms + s.delay_ms for d, s in proj.all_speakers() if d.enabled and s.role != OFF]
+    return max(0.0, min(totals)) if totals else 0.0
+
+
+def remove_common_delay(proj: Project) -> float:
+    """Takes the delay that every playing speaker shares off all of them (from the outputs'
+    Extra delay first, then from the speakers). Returns the milliseconds taken off."""
+    m = common_delay(proj)
+    if m < 0.05:
+        return 0.0
+    for dev in proj.devices:
+        if not dev.enabled:
+            continue
+        from_trim = min(max(dev.trim_ms, 0.0), m)
+        dev.trim_ms = round(dev.trim_ms - from_trim, 2)
+        rest = m - from_trim
+        for spk in dev.speakers:
+            spk.delay_ms = round(max(0.0, spk.delay_ms - rest), 2)
+    return m
+
+
 def auto_align_delays(proj: Project) -> None:
     """Delay the nearer speakers so sound from all of them reaches the
     listener at the same moment."""
@@ -925,3 +954,4 @@ def auto_align_delays(proj: Project) -> None:
     far = max(dist)
     for (_, spk), d in zip(items, dist):
         spk.delay_ms = round((far - d) / SPEED_OF_SOUND * 1000.0, 2)
+    remove_common_delay(proj)          # the latest speaker gets none at all

@@ -23,6 +23,22 @@ UPDATE_FEED = ""
 STAGE = "Beta"
 
 
+def build_time() -> str:
+    """When this copy of SpeakerWeave was built ("19 Oct 2026, 17:26"), or "" when it runs
+    straight from the source code. Shown in the title bar, so it is clear which one runs."""
+    try:
+        from ._build import BUILT
+        return str(BUILT)
+    except Exception:
+        return ""
+
+
+def full_name() -> str:
+    """"SpeakerWeave Beta v1.0 (built 19 Oct 2026, 17:26)", or "(from source)"."""
+    built = build_time()
+    return f"SpeakerWeave {version_name()} " + (f"(built {built})" if built else "(from source)")
+
+
 def version_name(version: str = "") -> str:
     """How a version is shown to people: "1.0.0" becomes "Beta v1.0", "1.2.1" "Beta v1.2.1"."""
     from . import __version__

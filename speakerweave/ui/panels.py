@@ -1008,6 +1008,14 @@ class SoundPanel(QWidget):
         form.addRow(dim("0 ms gives the least delay: SpeakerWeave then keeps only the room your "
                         "sound cards need, and adds a little more by itself if one runs dry. "
                         "Raise it if you still hear crackles or dropouts."))
+        self.exclusive = QCheckBox("Lowest delay: use each output on its own")
+        self.exclusive.setToolTip("Plays straight to each output, past Windows' sound mixer and its "
+                                  "buffer (WASAPI exclusive mode). That takes several milliseconds "
+                                  "off. While the sound runs, other programs cannot play on those "
+                                  "outputs. An output that does not allow it plays through Windows "
+                                  "as before.")
+        form.addRow(self.exclusive)
+        form.addRow(dim("The Performance page shows where the delay comes from."))
         col.addWidget(box)
 
         box = QGroupBox("Room")
@@ -1037,6 +1045,7 @@ class SoundPanel(QWidget):
         self.lfe_mains.toggled.connect(lambda v: self._set("lfe_to_mains", v, "routing"))
         self.keep_lows.toggled.connect(lambda v: self._set("keep_lows", v, "routing"))
         self.buffer.valueChanged.connect(lambda v: self._set("buffer_ms", v, "streams"))
+        self.exclusive.toggled.connect(lambda v: self._set("exclusive_outputs", v, "streams"))
         self.room_w.valueChanged.connect(lambda v: self._set("room_w", v, "layout"))
         self.room_h.valueChanged.connect(lambda v: self._set("room_h", v, "layout"))
         self.auto_face.toggled.connect(lambda v: self._set("auto_face", v, "save"))
@@ -1058,6 +1067,7 @@ class SoundPanel(QWidget):
         self.lfe_mains.setChecked(p.lfe_to_mains)
         self.keep_lows.setChecked(p.keep_lows)
         self.buffer.setValue(p.buffer_ms)
+        self.exclusive.setChecked(p.exclusive_outputs)
         self.room_w.setValue(p.room_w)
         self.room_h.setValue(p.room_h)
         self.auto_face.setChecked(p.auto_face)

@@ -25,6 +25,8 @@ ACTION_TEXT = {
     "surround": "Set it to 7.1",
     "listen_virtual": "Listen to the PC",
     "rescan": "Rescan",
+    "rate48": "Set it to 48 kHz",
+    "trim_delay": "Take it off",
     "sound_panel": "Open the Sound control panel",
     "positions": "Choose positions",
     "room": "Go to the room",
@@ -135,6 +137,31 @@ class ErrorsPage(QWidget):
     def refresh_soon(self, *_args) -> None:
         self._timer.start()
 
+    def _delay_findings(self, report) -> None:
+        """Things that make every speaker later than it needs to be."""
+        from ..model import common_delay
+        state = self.state
+        p = state.project
+        sr = float(getattr(state.engine, "sr", 0) or 0)
+        if state.runner.running and p.input_kind == "loopback" and sr > state.LOW_RATE + 1:
+            listened = p.input_name.replace(" [Loopback]", "")
+            report.add("warning", f"{listened} runs at {sr / 1000:g} kHz",
+                       "Every sound on the PC is converted up to this rate, SpeakerWeave then works "
+                       f"through {sr / state.LOW_RATE:.0f} times as many samples and every output "
+                       "converts it back down. That costs processor time and a little delay, and "
+                       "sounds no better: your speakers play 48 kHz.",
+                       "Press the button to set it to 48 kHz. The sound stops for a moment.",
+                       action="rate48")
+        for note in getattr(state.runner, "notes", []) if state.runner.running else []:
+            report.add("notice", "An output plays through Windows' mixer", note,
+                       "Nothing to do. If it crackles on its own, that is why it was left out.")
+        shared = common_delay(p)
+        if shared >= 1.0:
+            report.add("notice", f"Every speaker waits at least {shared:.1f} ms",
+                       "The delays of your speakers and outputs all have this much in common. It "
+                       "only makes everything later: taking it off every speaker keeps them in line.",
+                       "Press the button to take it off.", action="trim_delay")
+
     def findings(self) -> list:
         state = self.state
         report = soundcheck.Report()
@@ -152,6 +179,7 @@ class ErrorsPage(QWidget):
             report.add("error", text.split(":")[0] if ":" in text else "Starting the sound", text,
                        advice, action="rescan")
         runner = state.runner
+        self._delay_findings(report)
         if runner.running:
             for dev_id, (_fill, _ppm, glitches) in runner.status().items():
                 dev = state.project.find_device(dev_id)
@@ -324,6 +352,12 @@ class ErrorsPage(QWidget):
             window.statusBar().showMessage(problem or f"Listening to {device}.", 8000)
             if state.runner.running:
                 state.touch_streams()
+        elif action == "rate48":
+            problem = state.set_listen_rate(48000)
+            window.statusBar().showMessage(problem or "The virtual device now runs at 48 kHz.", 8000)
+        elif action == "trim_delay":
+            taken = state.trim_common_delay()
+            window.statusBar().showMessage(f"{taken:.1f} ms taken off every speaker.", 8000)
         elif action == "rescan":
             failed = bool(state.last_errors) and not state.runner.running
             state.scan_devices()

@@ -8,7 +8,7 @@ import time
 
 from PySide6.QtCore import QObject, QStandardPaths, QTimer, Signal
 
-from .. import backend, cable, default_output, hidden, sounds, speaker_library, windefault
+from .. import backend, cable, default_output, fun, hidden, sounds, speaker_library, windefault
 from ..engine import Engine
 from ..model import OFF, Project, is_shaker, is_sub, speaker_position
 from ..mics import MicMeters, is_microphone
@@ -105,6 +105,7 @@ class AppState(QObject):
     metronomeChanged = Signal()     # the metronome was switched on or off, or changed
     sweepChanged = Signal()         # a speaker sweep started or ended
     windowsVolumeChanged = Signal()  # the Windows volume of the device listened to changed
+    funChanged = Signal()           # a sound effect for fun was switched on or off, or changed
 
     def __init__(self, profile_path: str = ""):
         super().__init__()
@@ -147,6 +148,14 @@ class AppState(QObject):
         self._restart_timer.setSingleShot(True)
         self._restart_timer.setInterval(350)
         self._restart_timer.timeout.connect(self._restart)
+        # sound effects for fun: {effect key: when a timed run ends (time.monotonic), 0: on
+        # until switched off}. They start off every time SpeakerWeave opens.
+        self.fun_on: dict = {}
+        self._fun_timers: dict = {}
+        self._fun_save = QTimer(self)
+        self._fun_save.setSingleShot(True)
+        self._fun_save.setInterval(800)
+        self._fun_save.timeout.connect(self.save_settings)
 
     # ------------------------------------------------------------ profiles
     def _fix_layouts(self, project: Project) -> None:
@@ -679,7 +688,117 @@ class AppState(QObject):
             pass
         self.save_settings()
 
+    # ------------------------------------------------------------ delay
+    LOW_RATE = 48000
+
+    def set_listen_rate(self, rate: int = LOW_RATE) -> str:
+        """Sets the virtual device SpeakerWeave listens to to this sample rate (keeping its
+        channels) and starts the sound again. Returns a problem, or ""."""
+        listened = self.project.input_name.replace(" [Loopback]", "")
+        if not windefault.supported():
+            return "Only Windows has sound devices to set up."
+        dev_id = windefault.find(listened)
+        if not dev_id and cable.is_cable_input(listened):
+            dev_id = cable.find()[0]
+        if not dev_id:
+            return f"Windows has no output called {listened} right now."
+        was = self.runner.running
+        if was:
+            self.stop(keep_windows=True)
+        try:
+            windefault.set_channels(dev_id, windefault.channel_count(dev_id) or 8, rate=int(rate))
+        except OSError as exc:
+            problem = f"Windows did not take the new rate ({exc})."
+        else:
+            problem = ""
+        self.scan_devices()
+        if was:
+            self.start()
+        return problem
+
+    def trim_common_delay(self) -> float:
+        """Takes the delay every speaker shares off all of them. Returns the milliseconds."""
+        from ..model import remove_common_delay
+        taken = remove_common_delay(self.project)
+        if taken:
+            self.touch_routing()
+            self.structureChanged.emit()
+        return taken
+
+    # ------------------------------------------------------------ sound effects for fun
+    def fun_amount(self, key: str) -> float:
+        saved = self.settings.fun.get(key, {})
+        return fun.clean_amount(key, saved.get("amount", fun.BY_KEY[key].default))
+
+    def fun_seconds(self, key: str) -> float:
+        saved = self.settings.fun.get(key, {})
+        return fun.clean_seconds(key, saved.get("seconds", fun.BY_KEY[key].seconds))
+
+    def _fun_entry(self, key: str) -> dict:
+        return self.settings.fun.setdefault(key, {"amount": self.fun_amount(key),
+                                                  "seconds": self.fun_seconds(key)})
+
+    def set_fun_amount(self, key: str, value: float) -> None:
+        self._fun_entry(key)["amount"] = fun.clean_amount(key, value)
+        self._push_fun()
+        self._fun_save.start()
+        self.funChanged.emit()
+
+    def set_fun_seconds(self, key: str, value: float) -> None:
+        self._fun_entry(key)["seconds"] = fun.clean_seconds(key, value)
+        self._fun_save.start()
+        self.funChanged.emit()
+
+    def set_fun(self, key: str, on: bool, seconds: float = 0.0) -> None:
+        """Switches an effect on (for good, or for seconds) or off."""
+        if key not in fun.BY_KEY:
+            return
+        timer = self._fun_timers.pop(key, None)
+        if timer is not None:
+            timer.stop()
+            timer.deleteLater()
+        if on:
+            self.fun_on[key] = time.monotonic() + seconds if seconds > 0 else 0.0
+            if seconds > 0:
+                timer = QTimer(self)
+                timer.setSingleShot(True)
+                timer.timeout.connect(lambda k=key: self.set_fun(k, False))
+                timer.start(int(seconds * 1000))
+                self._fun_timers[key] = timer
+        else:
+            self.fun_on.pop(key, None)
+        self._push_fun()
+        self.funChanged.emit()
+
+    def toggle_fun(self, key: str) -> bool:
+        """On becomes off, off (or a timed run) becomes on for good. Returns on."""
+        on = key not in self.fun_on or self.fun_on[key] > 0
+        self.set_fun(key, on)
+        return on
+
+    def fun_for(self, key: str, seconds: float = 0.0) -> float:
+        """On for a while (the effect's own time unless seconds is given). Pressing it again
+        starts the time again. Returns the seconds."""
+        seconds = seconds or self.fun_seconds(key)
+        self.set_fun(key, True, seconds)
+        return seconds
+
+    def fun_left(self, key: str) -> float:
+        """Seconds left of a timed run, 0 when it is on for good or off."""
+        end = self.fun_on.get(key, 0.0)
+        return max(0.0, end - time.monotonic()) if end else 0.0
+
+    def stop_fun(self) -> None:
+        for key in list(self.fun_on):
+            self.set_fun(key, False)
+
+    def _push_fun(self) -> None:
+        self.engine.set_fun({key: self.fun_amount(key) for key in self.fun_on})
+
     def shutdown(self) -> None:
+        if self._fun_save.isActive():
+            self._fun_save.stop()
+            self.save_settings()
         self.mic_meters.close_all()
         self.winvol.stop()
         self.restore_default_output()

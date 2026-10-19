@@ -7,8 +7,8 @@ import time
 from PySide6.QtCore import QPoint, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout,
-                               QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QSlider,
-                               QSpinBox, QSplitter, QStackedWidget, QSystemTrayIcon, QTabWidget,
+                               QFrame, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+                               QScrollArea, QSlider, QSpinBox, QSplitter, QStackedWidget, QSystemTrayIcon, QTabWidget,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QWidgetAction)
 
 from .. import backend, cable, paths, speaker_library, updates, windefault
@@ -18,7 +18,7 @@ from ..model import (CUSTOM, OFF, SURROUND_SWITCHABLE, Project, ROLE_COLORS, ROL
                      auto_align_delays, auto_assign_roles, face_listener, is_shape, mode_choices,
                      mode_label, standard_mode_for)
 from .. import hidden
-from ..release import version_name
+from ..release import full_name, version_name
 from ..remote import RemoteServer
 from .simhub_link import SimHubLink
 from .tour import Tour, window_steps
@@ -37,6 +37,7 @@ from .extras import ExtrasPanel
 from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, ProblemsNote, UpdateNote
 from .levels import LevelsBar
 from .settings_page import SettingsPage, about_text
+from .fun_page import FunPage
 from .now_playing import NowPlaying, NowPlayingBar
 from .performance_page import PerformancePage
 from .state import own_setups_dir, remember_setup_folder, setups_dir
@@ -55,7 +56,7 @@ class MainWindow(QMainWindow):
     def __init__(self, state):
         super().__init__()
         self.state = state
-        self.setWindowTitle(f"SpeakerWeave {version_name()}")
+        self.setWindowTitle(full_name())
         self.setWindowIcon(theme.app_icon())
         self.resize(1500, 900)
         self._tree_loading = False
@@ -80,7 +81,13 @@ class MainWindow(QMainWindow):
         self.remote.on_game = self.simhub.reported.emit
 
         central = QWidget()
-        self.setCentralWidget(central)
+        # in a window smaller than everything needs, scroll bars appear instead of things
+        # being squashed or cut off
+        self.scroller = QScrollArea()
+        self.scroller.setWidgetResizable(True)
+        self.scroller.setFrameShape(QFrame.NoFrame)
+        self.scroller.setWidget(central)
+        self.setCentralWidget(self.scroller)
         root = QVBoxLayout(central)
         root.setContentsMargins(10, 10, 10, 6)
         root.setSpacing(8)
@@ -106,7 +113,7 @@ class MainWindow(QMainWindow):
         self.extras_panel = ExtrasPanel(state, self.simhub)
         self.tabs.addTab(self.extras_panel, "Effects")
         self.tabs.setTabToolTip(4, "SimHub, bass shakers, and extra sounds such as SimHub effects")
-        self.tabs.setMinimumWidth(470)
+        self.tabs.setMinimumWidth(430)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
@@ -116,6 +123,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(state, self)
         self.errors_page = ErrorsPage(state, self)
         self.performance_page = PerformancePage(state, self)
+        self.fun_page = FunPage(state, self)
         room_page = QWidget()
         room = QVBoxLayout(room_page)
         room.setContentsMargins(0, 0, 0, 0)
@@ -132,6 +140,7 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.settings_page)
         self.pages.addWidget(self.errors_page)
         self.pages.addWidget(self.performance_page)
+        self.pages.addWidget(self.fun_page)
         self._badge = (0, 0, 0)                 # errors, warnings, notices on the Errors button
         self._badge_lit = False                 # the red half of a flash
         self._warn_lit = False                  # the yellow moment of a new warning
@@ -159,6 +168,7 @@ class MainWindow(QMainWindow):
         state.masterChanged.connect(self._load_master)
         state.metronomeChanged.connect(self._metronome_changed)
         state.windowsVolumeChanged.connect(self._windows_volume_changed)
+        state.funChanged.connect(self._fun_changed)
         state.structureChanged.connect(state.refresh_metronome)
         state.selectionChanged.connect(state.refresh_metronome)
         self.updater = UpdateController(self, state)
@@ -213,7 +223,7 @@ class MainWindow(QMainWindow):
     def _build_top(self):
         # everything here can shrink, so the window also fits a small or zoomed laptop screen
         row = QHBoxLayout()
-        row.setSpacing(6)
+        row.setSpacing(4)
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("primary")
         self.start_btn.setCheckable(True)
@@ -228,7 +238,7 @@ class MainWindow(QMainWindow):
         self.mode.setMaxVisibleItems(20)
         # the box stays compact, the open list is wide enough for the longest entry
         self.mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.mode.setMinimumContentsLength(12)
+        self.mode.setMinimumContentsLength(9)
         self.mode.setMaximumWidth(360)
         self.mode.view().setMinimumWidth(self.mode.view().sizeHintForColumn(0) + 40)
         self.mode.setToolTip("Which speaker positions your room has. 4.0, 4.1, 5.0 and 5.1 come with "
@@ -242,7 +252,7 @@ class MainWindow(QMainWindow):
         row.addWidget(tag("Listen to"))
         self.input = QComboBox()
         self.input.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.input.setMinimumContentsLength(12)
+        self.input.setMinimumContentsLength(9)
         self.input.setToolTip("The one sound source that is spread over all your speakers")
         row.addWidget(self.input, 4)
         self.rescan = QPushButton("Rescan")
@@ -252,7 +262,7 @@ class MainWindow(QMainWindow):
         self.master = QSlider(Qt.Horizontal)
         self.master.setToolTip("Volume of all speakers together")
         self.master.setRange(-60, 12)
-        self.master.setMinimumWidth(80)
+        self.master.setMinimumWidth(64)
         self.master.setMaximumWidth(150)
         row.addWidget(self.master, 1)
         self.master_text = QLabel("")
@@ -275,15 +285,19 @@ class MainWindow(QMainWindow):
         row.addSpacing(6)
         self.nav = QButtonGroup(self)
         self.nav.setExclusive(True)
-        # page numbers: 0 room, 1 controls, 2 settings, 3 errors (shown second), 4 performance
-        for index, text in ((0, "Room"), (3, "Errors"), (1, "Controls"), (2, "Settings"),
+        # page numbers: 0 room, 1 controls, 2 settings, 3 errors, 4 performance, 5 fun
+        for index, text in ((0, "Room"), (5, "Fun"), (3, "Errors"), (1, "Controls"), (2, "Settings"),
                             (4, "Performance")):
             button = QPushButton(text)
+            button.setObjectName("nav")
             button.setCheckable(True)
             button.setChecked(index == 0)
             self.nav.addButton(button, index)
             row.addWidget(button)
         self.errors_btn = self.nav.button(3)
+        self.fun_btn = self.nav.button(5)
+        self.fun_btn.setToolTip("Sound effects for fun: bass boost, chipmunk voice, robot, echo, "
+                                "spinning round the room and more")
         self.nav.button(4).setToolTip("How much processor and memory SpeakerWeave uses, and how "
                                       "well the sound keeps up")
         self.errors_btn.setToolTip("Anything that keeps the sound from reaching your speakers, and "
@@ -308,7 +322,7 @@ class MainWindow(QMainWindow):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
-        self.tree.setMinimumWidth(210)
+        self.tree.setMinimumWidth(190)
         col.addWidget(self.tree, 1)
         col.addWidget(dim("Tick an output to use it. Click a speaker to change its role and sound."))
         self.bluetooth_btn = QPushButton("Bluetooth devices")
@@ -565,6 +579,11 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(900, self._startup_problems)
 
     # ------------------------------------------------------------ pages, tray, controls
+    def _fun_changed(self) -> None:
+        """The Fun button says how many effects are playing."""
+        count = len(self.state.fun_on)
+        self.fun_btn.setText(f"Fun ({count})" if count else "Fun")
+
     def show_page(self, index: int) -> None:
         self.pages.setCurrentIndex(index)
         note = getattr(self, "_update_note", None)
@@ -1042,6 +1061,7 @@ class MainWindow(QMainWindow):
         self._rebuild_tree()
         self.map.update()
         self.performance_page.restyle()
+        self.fun_page.restyle()
         self.now_playing.restyle()
         for page in (self.speaker_panel, self.device_panel, self.sound_panel, self.lights_panel):
             page.update()

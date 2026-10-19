@@ -55,6 +55,8 @@ class AppSettings:
     metronome_mode: str = "together"    # together, turns or selected
     # outputs the person hid in the output list, by name: see hidden.py
     hidden_outputs: dict = field(default_factory=dict)
+    # sound effects for fun: {effect key: {"amount": slider value, "seconds": play for}}
+    fun: dict = field(default_factory=dict)
 
     def save(self, path: str) -> None:
         tmp = path + ".tmp"
@@ -96,4 +98,6 @@ class AppSettings:
         if not isinstance(settings.games_seen, list):
             settings.games_seen = []
         settings.games_seen = [str(g) for g in settings.games_seen if g][:40]
+        from .fun import clean_settings
+        settings.fun = clean_settings(settings.fun)
         return settings

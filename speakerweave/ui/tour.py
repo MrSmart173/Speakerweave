@@ -137,6 +137,10 @@ class Tour(QWidget):
                 widget = None
         if widget is None or not widget.isVisible():
             return QRect()
+        scroller = getattr(self.window, "scroller", None)
+        if scroller is not None and scroller.widget() is not None \
+                and scroller.widget().isAncestorOf(widget):
+            scroller.ensureWidgetVisible(widget, PAD * 2, PAD * 2)   # a small window: scroll to it
         top_left = widget.mapTo(self.window, QPoint(0, 0))
         rect = QRect(top_left, widget.size()).adjusted(-PAD, -PAD, PAD, PAD)
         return rect.intersected(self.rect().adjusted(2, 2, -2, -2))
@@ -326,6 +330,15 @@ def window_steps(win) -> list:
              "Colours, your own test sounds, the Windows sound output, starting with Windows, "
              "updates, and Uninstall at the bottom.",
              lambda: win.nav.button(2), page(2)),
+        Step("Fun",
+             "Sound effects for everything the PC plays: bass boost, chipmunk or deep voice, robot, "
+             "echo, the whole sound spinning round the room and more. Switch one on, or play it "
+             "for a few seconds from a key.",
+             lambda: win.fun_btn, page(5)),
+        Step("Performance",
+             "How much of the processor and memory SpeakerWeave uses, and how well the sound keeps "
+             "up on every output.",
+             lambda: win.nav.button(4), page(4)),
         Step("The Setup menu",
              "Save a setup and open it again, open the full guide, and take this tour again.",
              lambda: win.setup_btn, room),

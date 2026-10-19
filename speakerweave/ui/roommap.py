@@ -5,7 +5,7 @@ import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
-from PySide6.QtWidgets import QMenu, QPushButton, QToolTip, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QToolTip, QWidget
 
 from ..model import (OFF, REAL_SPEAKERS, ROLE_ANGLES, ROLE_COLORS, ROLE_NAMES, ROLE_SHORT, can_move_alone, is_shape,
                      is_sub, face_listener, move_speaker, set_attached, shape_role, speaker_distance,
@@ -17,6 +17,17 @@ R = 13.0          # speaker badge radius in pixels
 SNAP = 0.05       # metres
 EDGE_IN = 5.0     # the rim of a speaker badge reacts this far inside its edge
 EDGE_OUT = 13.0   # ... and this far outside it
+ZOOM_MIN, ZOOM_MAX = 1.0, 12.0      # 1: the whole room fills the map
+ZOOM_STEP = 1.25                    # one press of + or -
+WHEEL_STEP = 1.15                   # one notch of the mouse wheel
+FIT_MARGIN = 46                     # pixels kept free around everything by Fit
+FIT_AROUND_YOU = 0.5                # Fit always shows at least this far around you, in metres
+GRID_STEPS = (0.05, 0.1, 0.25, 0.5, 1.0)        # metres between grid lines
+SCALE_BARS = (0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0)
+
+
+def zoom_text(zoom: float) -> str:
+    return f"{zoom * 100:.0f}%"
 
 
 def _dist(a: QPointF, b: QPointF) -> float:
@@ -50,6 +61,116 @@ class RoomMap(QWidget):
         self.attach_btn.toggled.connect(self._attach_toggled)
         for sig in (state.selectionChanged, state.structureChanged, state.layoutChanged):
             sig.connect(self._place_attach)
+        # zoom, in the top left corner: closer speakers can be spread out, distances stay true
+        self.zoom_bar = QWidget(self)
+        bar = QHBoxLayout(self.zoom_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(4)
+        from .now_playing import icon
+        self.zoom_out_btn = QPushButton()
+        self.zoom_out_btn.setIcon(icon("minus", 14))
+        self.zoom_label = QPushButton("100%")
+        self.zoom_in_btn = QPushButton()
+        self.zoom_in_btn.setIcon(icon("plus", 14))
+        self.fit_btn = QPushButton("Fit")
+        for button in (self.zoom_out_btn, self.zoom_in_btn):
+            button.setFixedWidth(30)
+        self.zoom_label.setFixedWidth(64)
+        self.zoom_out_btn.setToolTip("Zoom out (or the mouse wheel over an empty spot, or the minus key)")
+        self.zoom_in_btn.setToolTip("Zoom in: speakers close to you spread out on the map. Distances "
+                                    "stay the same, only the map gets bigger (or the mouse wheel, or +)")
+        self.zoom_label.setToolTip("Back to the whole room (or the 0 key)")
+        self.fit_btn.setCheckable(True)
+        self.fit_btn.setToolTip("On: the map zooms itself so every speaker, microphone and you fit, "
+                                "also when the window changes size.\nZooming by hand switches it off.")
+        for button in (self.zoom_out_btn, self.zoom_label, self.zoom_in_btn, self.fit_btn):
+            button.setFocusPolicy(Qt.NoFocus)
+            bar.addWidget(button)
+        self.zoom_out_btn.clicked.connect(lambda: self.set_zoom(self.zoom / ZOOM_STEP))
+        self.zoom_in_btn.clicked.connect(lambda: self.set_zoom(self.zoom * ZOOM_STEP))
+        self.zoom_label.clicked.connect(lambda: self.set_zoom(1.0))
+        self.fit_btn.clicked.connect(self.set_auto)
+        self.zoom_bar.adjustSize()
+        self.zoom_bar.move(10, 8)
+        self._auto_zoom = 1.0
+        for sig in (state.structureChanged, state.layoutChanged):
+            sig.connect(self.refit)
+        self.refit()
+
+    # ------------------------------------------------------------ zoom
+    @property
+    def zoom(self) -> float:
+        if self.state.project.map_auto:
+            return self._auto_zoom
+        return min(max(float(self.state.project.map_zoom or 1.0), ZOOM_MIN), ZOOM_MAX)
+
+    def set_zoom(self, zoom: float) -> None:
+        """Zooming by hand: the map stays at this zoom (and stops fitting itself)."""
+        zoom = round(min(max(float(zoom), ZOOM_MIN), ZOOM_MAX), 3)
+        p = self.state.project
+        if not p.map_auto and abs(zoom - self.zoom) < 1e-6:
+            return
+        p.map_zoom, p.map_auto = zoom, False
+        self.state.save_soon()                  # every setup keeps its own zoom
+        self._show_zoom()
+        self.update()
+
+    def set_auto(self, on: bool = True) -> None:
+        """On: the map zooms itself to keep everything in view, whatever the window size."""
+        p = self.state.project
+        if not on:
+            p.map_zoom = self.zoom              # stays where it is, now by hand
+        p.map_auto = bool(on)
+        self.state.save_soon()
+        self.refit()
+
+    def refit(self, *_args) -> None:
+        """Fits the zoom again (only while it fits itself, and never in the middle of a drag,
+        so nothing jumps away under the mouse)."""
+        if self.state.project.map_auto and self._drag is None:
+            self._auto_zoom = self.fit_zoom()
+        self._show_zoom()
+        self.update()
+
+    def _show_zoom(self) -> None:
+        z = self.zoom
+        auto = bool(self.state.project.map_auto)
+        self.zoom_label.setText(zoom_text(z))
+        self.zoom_out_btn.setEnabled(auto or z > ZOOM_MIN + 1e-6)
+        self.zoom_in_btn.setEnabled(auto or z < ZOOM_MAX - 1e-6)
+        self.zoom_label.setEnabled(auto or z > ZOOM_MIN + 1e-6)
+        self.fit_btn.blockSignals(True)
+        self.fit_btn.setChecked(auto)
+        self.fit_btn.blockSignals(False)
+
+    def _things(self) -> list:
+        """Every point on the map that should be in view: speakers, units, microphones, you,
+        and a little room around you, so a map with only you on it is not zoomed right in."""
+        proj = self.state.project
+        lx, ly = proj.listener_x, proj.listener_y
+        pts = [(lx, ly), (lx - FIT_AROUND_YOU, ly - FIT_AROUND_YOU),
+               (lx + FIT_AROUND_YOU, ly + FIT_AROUND_YOU)]
+        for dev in proj.devices:
+            pts.append((dev.x, dev.y))
+            pts.extend(speaker_position(dev, spk) for spk in dev.speakers)
+        pts.extend((mic.x, mic.y) for mic in proj.mics)
+        return pts
+
+    def fit_zoom(self) -> float:
+        """The closest zoom at which everything on the map still fits in view."""
+        pts = self._things()
+        left, top = FIT_MARGIN, FIT_MARGIN + 18                 # room for the zoom buttons
+        right, bottom = self.width() - FIT_MARGIN, self.height() - FIT_MARGIN - 10
+        zoom = ZOOM_MAX
+        while zoom > ZOOM_MIN:
+            s, cx, cy = self._geom(zoom)
+            if all(left <= cx + x * s <= right and top <= cy + y * s <= bottom for x, y in pts):
+                return max(ZOOM_MIN, math.floor(zoom * 20) / 20)      # a round number, 5% steps
+            zoom /= 1.05
+        return ZOOM_MIN
+
+    def fit(self) -> None:
+        self.set_auto(True)
 
     # ------------------------------------------------------------ attach toggle
     def _place_attach(self) -> None:
@@ -81,14 +202,20 @@ class RoomMap(QWidget):
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         self._place_attach()
+        self.refit()                            # a bigger or smaller window: fit again
 
     # ------------------------------------------------------------ geometry
-    def _geom(self):
+    def _geom(self, zoom=None):
+        """(pixels per metre, where x 0 and y 0 are on screen). At 100% the whole room fills
+        the map. Zoomed in, the view closes in on you, so the speakers around you spread out."""
         p = self.state.project
         w = max(50.0, self.width() - 2 * PAD)
         h = max(50.0, self.height() - 2 * PAD)
-        scale = max(8.0, min(w / max(p.room_w, 0.5), h / max(p.room_h, 0.5)))
-        return scale, self.width() / 2.0, self.height() / 2.0
+        zoom = self.zoom if zoom is None else zoom
+        scale = max(8.0, min(w / max(p.room_w, 0.5), h / max(p.room_h, 0.5))) * zoom
+        towards_you = min(max(zoom - 1.0, 0.0), 1.0)            # all the way from 200% on
+        vx, vy = p.listener_x * towards_you, p.listener_y * towards_you
+        return scale, self.width() / 2.0 - vx * scale, self.height() / 2.0 - vy * scale
 
     def to_px(self, x: float, y: float) -> QPointF:
         s, cx, cy = self._geom()
@@ -101,7 +228,8 @@ class RoomMap(QWidget):
     def _clamp(self, x: float, y: float, snap: bool) -> tuple[float, float]:
         p = self.state.project
         if snap:
-            x, y = round(x / SNAP) * SNAP, round(y / SNAP) * SNAP
+            step = SNAP if self._geom()[0] < 400 else 0.01        # zoomed in: to the centimetre
+            x, y = round(x / step) * step, round(y / step) * step
         x = min(max(x, -p.room_w / 2), p.room_w / 2)
         y = min(max(y, -p.room_h / 2), p.room_h / 2)
         return round(x, 3), round(y, 3)
@@ -311,7 +439,7 @@ class RoomMap(QWidget):
             self._drag = None
             self._hover = None
             self.setCursor(Qt.OpenHandCursor)
-            self.state.touch_layout()
+            self.state.touch_layout()           # and fits the zoom again, now the drag is over
 
     def leaveEvent(self, _ev):
         if self._hover is not None and self._drag is None:
@@ -402,6 +530,15 @@ class RoomMap(QWidget):
         if ev.key() == Qt.Key_Space and self.state.sel_spk:
             self.state.identify(self.state.sel_spk, "noise")
             return
+        if ev.key() in (Qt.Key_Plus, Qt.Key_Equal):
+            self.set_zoom(self.zoom * ZOOM_STEP)
+            return
+        if ev.key() in (Qt.Key_Minus, Qt.Key_Underscore):
+            self.set_zoom(self.zoom / ZOOM_STEP)
+            return
+        if ev.key() == Qt.Key_0:
+            self.set_zoom(1.0)
+            return
         super().keyPressEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
@@ -410,8 +547,14 @@ class RoomMap(QWidget):
             self.state.identify(hit[2].id)
 
     def wheelEvent(self, ev):
+        """Over a unit: turns it. Anywhere else, or with Ctrl held: zooms."""
         hit = self._hit(ev.position())
-        if not hit or hit[1] is None or hit[1].kind != "builtin":
+        turn = hit and hit[1] is not None and hit[1].kind == "builtin" \
+            and not (ev.modifiers() & Qt.ControlModifier)
+        if not turn:
+            notches = ev.angleDelta().y() / 120.0
+            if notches:
+                self.set_zoom(self.zoom * WHEEL_STEP ** notches)
             return
         dev = hit[1]
         step = 5.0 if ev.angleDelta().y() > 0 else -5.0
@@ -427,7 +570,7 @@ class RoomMap(QWidget):
                 text = (f"{spk.name} channel of {dev.title}\nPlays: {ROLE_NAMES.get(spk.role, spk.role)}"
                         f"\nDouble click to hear which one it is")
             elif hit and hit[0] == "device":
-                text = f"{hit[1].title}\nDrag to move, scroll to turn"
+                text = f"{hit[1].title}\nDrag to move, scroll to turn (Ctrl and scroll to zoom)"
             elif hit and hit[0] == "listener":
                 text = "You (the listening position)"
             elif hit and hit[0] == "turn":
@@ -502,35 +645,46 @@ class RoomMap(QWidget):
     def _paint_grid(self, p, room, s, cx, cy):
         proj = self.state.project
         p.save()
-        p.setClipRect(room.adjusted(1, 1, -1, -1))
+        seen = room.intersected(QRectF(self.rect()))
+        p.setClipRect(room.adjusted(1, 1, -1, -1).intersected(QRectF(self.rect())))
+        step = next((g for g in GRID_STEPS if g * s >= 22), GRID_STEPS[-1])
         half_w, half_h = proj.room_w / 2, proj.room_h / 2
-        k = math.ceil(-half_w / 0.5)
-        while k * 0.5 <= half_w:
-            major = k % 2 == 0
-            p.setPen(QPen(theme.faint(18 if major else 8), 1))
-            x = cx + k * 0.5 * s
+        # only the lines that are in view (zoomed far in, the room is much bigger than the map)
+        lo_x, hi_x = max(-half_w, (seen.left() - cx) / s), min(half_w, (seen.right() - cx) / s)
+        lo_y, hi_y = max(-half_h, (seen.top() - cy) / s), min(half_h, (seen.bottom() - cy) / s)
+        k = math.ceil(lo_x / step)
+        while k * step <= hi_x + 1e-9:
+            p.setPen(QPen(theme.faint(18 if k % 2 == 0 else 8), 1))
+            x = cx + k * step * s
             p.drawLine(QPointF(x, room.top()), QPointF(x, room.bottom()))
             k += 1
-        k = math.ceil(-half_h / 0.5)
-        while k * 0.5 <= half_h:
-            major = k % 2 == 0
-            p.setPen(QPen(theme.faint(18 if major else 8), 1))
-            y = cy + k * 0.5 * s
+        k = math.ceil(lo_y / step)
+        while k * step <= hi_y + 1e-9:
+            p.setPen(QPen(theme.faint(18 if k % 2 == 0 else 8), 1))
+            y = cy + k * step * s
             p.drawLine(QPointF(room.left(), y), QPointF(room.right(), y))
             k += 1
         p.restore()
-        # one metre scale bar
+        # a scale bar of a round length, in the bottom left corner of what is in view
+        bar = SCALE_BARS[0]
+        for length in SCALE_BARS:
+            if length * s <= 150:
+                bar = length
+        px = bar * s
         p.setPen(QPen(QColor(theme.DIM), 1.5))
-        x0, y0 = room.left() + 12, room.bottom() - 12
-        p.drawLine(QPointF(x0, y0), QPointF(x0 + s, y0))
+        x0, y0 = seen.left() + 12, min(seen.bottom(), self.height() - 30) - 12
+        p.drawLine(QPointF(x0, y0), QPointF(x0 + px, y0))
         p.drawLine(QPointF(x0, y0 - 3), QPointF(x0, y0 + 3))
-        p.drawLine(QPointF(x0 + s, y0 - 3), QPointF(x0 + s, y0 + 3))
+        p.drawLine(QPointF(x0 + px, y0 - 3), QPointF(x0 + px, y0 + 3))
         f = QFont(self.font())
         f.setPointSizeF(8)
         p.setFont(f)
-        p.drawText(QRectF(x0, y0 - 18, s, 14), Qt.AlignCenter, "1 m")
-        p.drawText(QRectF(room.left() + 10, room.top() + 6, 80, 14), Qt.AlignLeft, "FRONT")
-        p.drawText(QRectF(room.left() + 10, room.bottom() - 46, 80, 14), Qt.AlignLeft, "BACK")
+        text = f"{bar:g} m" if bar >= 1 else f"{bar * 100:.0f} cm"
+        p.drawText(QRectF(x0 - 10, y0 - 18, px + 20, 14), Qt.AlignCenter, text)
+        if room.top() >= 0:
+            p.drawText(QRectF(room.left() + 10, room.top() + 6, 80, 14), Qt.AlignLeft, "FRONT")
+        if room.bottom() <= self.height() - 30:
+            p.drawText(QRectF(room.left() + 10, room.bottom() - 46, 80, 14), Qt.AlignLeft, "BACK")
 
     def _paint_guides(self, p):
         """Ring around the listener with the ideal spot for each role. It is
@@ -539,7 +693,8 @@ class RoomMap(QWidget):
         s, _, _ = self._geom()
         dists = sorted(speaker_distance(proj, d, sp) for d, sp in proj.all_speakers() if sp.role != OFF)
         radius = dists[len(dists) // 2] if dists else 1.6
-        radius = min(max(radius, 0.8), 0.48 * min(proj.room_w, proj.room_h))
+        # it follows the speakers, also a desk setup with speakers half a metre away
+        radius = min(max(radius, 0.3), 0.48 * min(proj.room_w, proj.room_h))
         c = self.to_px(proj.listener_x, proj.listener_y)
         pen = QPen(theme.faint(95), 1.4, Qt.DashLine)
         p.setPen(pen)

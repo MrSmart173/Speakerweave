@@ -8,3 +8,4 @@ third_party/VBCABLE/
 packaging/simhub/out/
 usb copy.txt
 channel test.txt
+speakerweave/_build.py
