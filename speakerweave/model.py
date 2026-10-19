@@ -322,7 +322,7 @@ class Project:
     bass_redirect: bool = True
     bass_redirect_db: float = -6.0
     lfe_to_mains: bool = True
-    master_db: float = -6.0
+    master_db: float = 0.0       # the volume slider at the top: full volume to start with
     muted: bool = False         # everything silent (Mute action)
     room_w: float = 5.0
     room_h: float = 5.0
