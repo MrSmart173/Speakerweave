@@ -121,11 +121,66 @@ def plugin_source() -> str:
 
 
 def _digest(path: str) -> str:
+    """A fingerprint of the plugin's code. The C# compiler of Windows stamps every build with
+    the time and a random id, so the same code built twice gives two different files: those
+    two stamps are blanked first, so only a real change of the plugin counts."""
     try:
         with open(path, "rb") as fh:
-            return hashlib.sha256(fh.read()).hexdigest()
+            data = bytearray(fh.read())
     except OSError:
         return ""
+    try:
+        _blank_build_stamps(data)
+    except (ValueError, IndexError):
+        pass                                    # not a .NET file we can read: compare it whole
+    return hashlib.sha256(bytes(data)).hexdigest()
+
+
+def _u16(data, at: int) -> int:
+    return int.from_bytes(data[at:at + 2], "little")
+
+
+def _u32(data, at: int) -> int:
+    return int.from_bytes(data[at:at + 4], "little")
+
+
+def _blank_build_stamps(data: bytearray) -> None:
+    """Zeroes the build time in the PE header, the checksum, and the #GUID heap of the .NET
+    metadata (where the random module id of each build lives)."""
+    pe = _u32(data, 0x3C)
+    if data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError("not a PE file")
+    sections, opt_size = _u16(data, pe + 6), _u16(data, pe + 20)
+    data[pe + 8:pe + 12] = bytes(4)                         # the time it was built
+    opt = pe + 24
+    data[opt + 64:opt + 68] = bytes(4)                      # the checksum, which covers it
+    dirs = opt + (96 if _u16(data, opt) == 0x10B else 112)
+    cli_rva = _u32(data, dirs + 14 * 8)
+    table = opt + opt_size
+
+    def offset(rva: int) -> int:
+        for i in range(sections):
+            s = table + i * 40
+            start, size, raw = _u32(data, s + 12), max(_u32(data, s + 8), _u32(data, s + 16)), _u32(data, s + 20)
+            if start <= rva < start + size:
+                return raw + rva - start
+        raise ValueError("address outside every section")
+
+    cli = offset(cli_rva)
+    meta = offset(_u32(data, cli + 8))
+    if _u32(data, meta) != 0x424A5342:                      # "BSJB"
+        raise ValueError("no .NET metadata")
+    version_len = _u32(data, meta + 12)
+    at = meta + 16 + version_len
+    streams = _u16(data, at + 2)
+    at += 4
+    for _ in range(streams):
+        start, size = _u32(data, at), _u32(data, at + 4)
+        end = data.index(0, at + 8)
+        name = bytes(data[at + 8:end])
+        at = (end + 4) & ~3
+        if name == b"#GUID":
+            data[meta + start:meta + start + size] = bytes(size)
 
 
 def plugin_state(folder: str = None, source: str = None) -> str:

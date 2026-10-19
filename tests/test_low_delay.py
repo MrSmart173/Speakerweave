@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 
 from speakerweave.backend import AudioRunner
+from speakerweave import engine as engine_module
 from speakerweave.engine import AdaptiveFifo, Engine
 from speakerweave.model import Project
 
@@ -33,14 +34,21 @@ def run(fifo, read_frames, seconds=20.0, jitter_ms=2.0, seed=1):
         t += read_frames / SR
     block = np.full((BLOCK, fifo.channels), 0.1, dtype=np.float32)
     dry_after_start = 0
-    for when, kind in sorted(events):
-        if kind == "w":
-            fifo.write(block)
-            fifo.set_target(max(fifo.target, fifo.need))      # what the runner does after each block
-        else:
-            out = fifo.read(read_frames)
-            if when > 2.0 and not out.any():
-                dry_after_start += 1
+    real_clock = engine_module.time.perf_counter
+    clock = [1000.0]
+    engine_module.time.perf_counter = lambda: clock[0]     # the buffer sees the simulated time
+    try:
+        for when, kind in sorted(events):
+            clock[0] = 1000.0 + when
+            if kind == "w":
+                fifo.write(block)
+                fifo.set_target(max(fifo.target, fifo.need))  # what the runner does after each block
+            else:
+                out = fifo.read(read_frames)
+                if when > 2.0 and not out.any():
+                    dry_after_start += 1
+    finally:
+        engine_module.time.perf_counter = real_clock
     return dry_after_start
 
 

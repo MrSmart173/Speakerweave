@@ -33,6 +33,7 @@ from .positions_dialog import PositionsDialog
 from .roommap import RoomMap
 from .errors_page import ErrorsPage, badge_flash_style, badge_style, badge_text
 from .easy_sync import start_easy_sync
+from .tap_sync import start_tap_sync
 from .extras import ExtrasPanel
 from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, ProblemsNote, UpdateNote
 from .levels import LevelsBar
@@ -356,12 +357,16 @@ class MainWindow(QMainWindow):
         self.mirror_btn.setToolTip("On: when you move one speaker, its partner on the other side "
                                    "moves the opposite way sideways and the same way front to back")
         self.sync_btn = QPushButton("Easy sync")
-        self.sync_btn.setToolTip("Line up the timing of your speakers by ear, two at a time, so every "
-                                 "speaker's sound reaches you together")
-        self.sync_btn.clicked.connect(lambda: start_easy_sync(self))
+        self.sync_btn.setToolTip("Line up the timing of your speakers so every speaker's sound reaches "
+                                 "you together: by ear, two at a time, or by tapping along to each one")
+        sync_menu = QMenu(self.sync_btn)
+        sync_menu.addAction("Two speakers at a time, by ear", lambda: start_easy_sync(self))
+        sync_menu.addAction("Tap along: measure each speaker", lambda: start_tap_sync(self))
+        self.sync_btn.setMenu(sync_menu)
         self.play_btn = QPushButton("Test sound")
         self.play_btn.setToolTip("Plays a sound on the selected speaker only (you can also right click "
-                                 "a speaker on the map, or select it and press Space), or a sweep "
+                                 "a speaker on the map, or select it and press Space), with no "
+                                 "speaker selected on every speaker that is not muted, or a sweep "
                                  "that moves round all your speakers.")
         play_menu = QMenu(self.play_btn)
         play_menu.aboutToShow.connect(lambda: self._fill_play_menu(play_menu))
@@ -413,7 +418,8 @@ class MainWindow(QMainWindow):
     def _fill_play_menu(self, menu) -> None:
         fill_sound_menu(menu, self.state, self._play_selected)
         if menu.actions():
-            menu.insertSection(menu.actions()[0], "On the selected speaker")
+            menu.insertSection(menu.actions()[0], "On the selected speaker" if self.state.sel_spk
+                               else "On every speaker (none is selected)")
         menu.addSection("Round all your speakers")
         if self.state.engine.sweeping:
             menu.addAction("Stop the sweep", self.state.stop_sweep)
@@ -699,10 +705,11 @@ class MainWindow(QMainWindow):
             self.state.notice.emit("New sound output: " + "; ".join(parts) + ". Tick it to use it.")
 
     def _play_selected(self, kind: str) -> None:
+        """On the selected speaker, or with none selected on every speaker that is not muted."""
         if self.state.sel_spk:
             self.state.identify(self.state.sel_spk, kind)
         else:
-            self.state.notice.emit("Select a speaker on the map first.")
+            self.state.identify_all(kind)
 
     def _load_master(self) -> None:
         p = self.state.project

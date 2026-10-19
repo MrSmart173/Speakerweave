@@ -284,9 +284,10 @@ def window_steps(win) -> list:
              "one by one. Right click anything for more.",
              lambda: win.map, room),
         Step("Test and tune",
-             "Test sound plays on the selected speaker only. Set roles gives every speaker the role "
-             "of the place it sits in. Easy sync lines up the timing of your speakers by ear, two "
-             "at a time, and Line up delays does it from the distances on the map. Mirror moves "
+             "Test sound plays on the selected speaker (with none selected, on every speaker). Set "
+             "roles gives every speaker the role of the place it sits in. Easy sync lines up the "
+             "timing of your speakers, by ear two at a time or by tapping along to each one, and "
+             "Line up delays does it from the distances on the map. Mirror moves "
              "pairs of speakers together, and Metronome ticks on your speakers so you can hear "
              "whether they play in time.",
              lambda: win.sync_btn, room),

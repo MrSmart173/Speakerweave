@@ -344,7 +344,7 @@ class Project:
     devices: list[Device] = field(default_factory=list)
     extra_sources: list[ExtraSource] = field(default_factory=list)
     mics: list[Mic] = field(default_factory=list)       # microphones placed on the map
-    setup_version: int = 2      # 2: the safety buffer defaults to 0 ms
+    setup_version: int = 3      # 2: the safety buffer defaults to 0 ms. 3: full volume to start
 
     # ---- lookups
     def mode_roles(self) -> list[str]:
@@ -647,6 +647,9 @@ def _project_from_dict(data: dict) -> Project:
     data = dict(data)
     if "setup_version" not in data and data.get("buffer_ms") == 60.0:
         data["buffer_ms"] = 0.0     # the old default: setups get the new lowest delay as well
+    if int(data.get("setup_version", 1) or 1) < 3 and data.get("master_db") == -6.0:
+        data["master_db"] = 0.0     # the old starting volume: setups start at full volume too
+    data["setup_version"] = Project.setup_version
     data["devices"] = devices
     sources = []
     for src in data.get("extra_sources", []) or []:

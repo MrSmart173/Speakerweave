@@ -370,6 +370,9 @@ select it and press Space, or use **Test sound**. This works even while the soun
 stopped: SpeakerWeave starts it for the test and stops it again. The sweep is the easiest
 way to hear where a speaker's frequency limits are.
 
+With no speaker selected, the sounds under **Test sound** play on every speaker that is not
+muted at once (with a solo, on the soloed ones).
+
 **Test sound** also has two sweeps that use every speaker:
 
 * **Sweep round the room (360°)**: a sound goes round you clockwise from straight ahead,
@@ -497,13 +500,27 @@ Every speaker plays a little late, and each by a different amount: Bluetooth and
 their own lag, and sound takes about 3 ms to travel each metre. The tools under the map line
 them up so every speaker's sound reaches your seat together.
 
-* **Easy sync** walks you through it by ear. Two speakers at a time tick together. The click
+* **Easy sync > Two speakers at a time, by ear** walks you through it by ear. Two speakers at a time tick together. The click
   seems to come from the speaker that plays first, so add delay to that one, a little at a
-  time, until you hear a single click from between the two. Then the next pair, until every
+  time (steps of 5, 1 and 0.1 ms, and the same steps back with the − buttons), until you hear
+  a single click from between the two. While its window is open the clicks play 6 dB louder,
+  so they are easy to hear: **Clicks louder by** changes how much (it is remembered), and the
+  volume goes back to normal when the window closes. Type a delay into a speaker's box, or
+  press **Sweep later** or **Sweep earlier** to let the delay creep (at the **Sweep speed**
+  chosen) and **Stop** the moment the clicks sound like one. Every speaker starts at 0.0 ms.
+  Then the next pair, until every
   speaker has been matched (subwoofers come last, with a low thump instead of a click). At
   the end, the speaker that needed the least delay is set to 0 ms and the same amount comes
   off all the others, so everything plays as early as possible. **Cancel** puts every delay
   back as it was.
+* **Easy sync > Tap along** measures each speaker instead. Its clicks play on one speaker at a
+  time, and a wide box shows the time around every click: 0 ms is the moment SpeakerWeave
+  sends it, and a line runs across as each click comes up. Press **I hear it** (or Space)
+  every time you hear the click, tapping along to the beat. Each press leaves a mark, and
+  after six the middle of them is that speaker's delay (a slip of the finger does not count).
+  Pick the next speaker in the list. **Use these results** then delays the faster speakers so
+  every click lands together, the slowest at 0 ms. Speakers you did not measure keep their
+  delay, and **Cancel** puts everything back.
 * **Metronome** ticks on your speakers: every speaker together (one crisp click means they
   are in time), one speaker after another round the room (the clicks should be perfectly
   even), or only the selected one. Change the tempo in its menu. The PC sound waits while

@@ -24,7 +24,9 @@ def _low(spk) -> bool:
 
 
 class EasySync:
-    def __init__(self, project, rng=None):
+    def __init__(self, project, rng=None, from_zero: bool = False):
+        """from_zero: every speaker starts at 0.0 ms delay, a clean start (Cancel still puts
+        the old delays back)."""
         self.project = project
         rng = rng or random.Random()
         mains, subs = [], []
@@ -41,6 +43,9 @@ class EasySync:
         self.order = [spk.id for spk in mains + subs]
         self.low = {spk.id: _low(spk) for spk in mains + subs}
         self.start = {spk.id: spk.delay_ms for spk in mains + subs}
+        if from_zero:
+            for spk in mains + subs:
+                spk.delay_ms = 0.0
         self.index = 0
 
     # ------------------------------------------------------------ where we are
@@ -78,6 +83,15 @@ class EasySync:
             spk = self.speakers[i]
             spk.delay_ms = round(min(max(spk.delay_ms + ms, 0.0), MAX_DELAY_MS), 2)
         return list(group)
+
+    def set_delay(self, spk_id: str, ms: float) -> list:
+        """The delay typed in for one speaker of the pair. Only the difference to the other
+        side counts, so this moves it by the difference (see hold_back). Returns the ids
+        whose delay changed."""
+        change = float(ms) - self.delay(spk_id)
+        if abs(change) < 1e-9:
+            return []
+        return self.hold_back(spk_id, change)
 
     def next(self) -> bool:
         """On to the next pair. False when this was the last one."""

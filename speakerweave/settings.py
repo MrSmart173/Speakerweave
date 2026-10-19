@@ -52,6 +52,7 @@ class AppSettings:
     update_note_seen: str = ""          # the newer version whose note was closed with Later
     last_setup_folder: str = ""         # where a setup was last opened or saved
     metronome_bpm: int = 100
+    test_boost_db: float = 6.0          # test sounds this much louder while Easy sync is open
     metronome_mode: str = "together"    # together, turns or selected
     # outputs the person hid in the output list, by name: see hidden.py
     hidden_outputs: dict = field(default_factory=dict)
@@ -91,6 +92,10 @@ class AppSettings:
             settings.game_setups = {}
         settings.game_setups = {str(k): str(v or "") for k, v in settings.game_setups.items()}
         settings.metronome_bpm = int(min(240, max(30, int(settings.metronome_bpm or 100))))
+        try:
+            settings.test_boost_db = float(min(max(float(settings.test_boost_db), -12.0), 12.0))
+        except (TypeError, ValueError):
+            settings.test_boost_db = 6.0
         if settings.metronome_mode not in ("together", "turns", "selected"):
             settings.metronome_mode = "together"
         from .hidden import clean as clean_hidden

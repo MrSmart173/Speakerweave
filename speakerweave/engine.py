@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
@@ -84,12 +85,14 @@ class Engine:
         self._roam_noise = PinkNoise(11)
         self.sweep_done = 0         # the number of the last sweep that played to its end
         self._identify_id = ""
+        self._identify_ids = frozenset()    # the speakers the test sound plays on
         self._identify_left = 0
         self._identify_total = 0
         self._identify_kind = "noise"
         self._sweep_phase = 0.0
         self._custom = None                # samples of a sound the user added, while it plays
         self.test_only = False             # True: nothing but test sounds reach the speakers
+        self.test_gain = 1.0               # test sounds louder than usual (Easy sync, +6 dB)
         self.input_peaks = np.zeros(2)
         self.output_peaks: dict = {}      # {device id: peak of each channel}, for the meters
         # extra sources (SimHub effects, a spotter app ...): filled by their own capture
@@ -101,6 +104,12 @@ class Engine:
         self._pair_until = 0
         self._together = 0                # how long both fronts have been playing together
         self._samples = 0
+        # when each metronome click leaves the engine, by the PC's clock (time.perf_counter),
+        # for Tap along. Blocks arrive in bursts, so the engine's own sample count is tied to
+        # the clock through the earliest any block ever came (see _tie_clock).
+        self.click_times = deque(maxlen=32)
+        self._anchor = None
+        self._block_wall = 0.0
         self._last_matrix = None
         self.layout_override = ""      # set by the built in test signal
         self.windows_gain = 1.0        # the Windows volume of the device listened to (winvolume.py)
@@ -228,8 +237,9 @@ class Engine:
 
     SWEEP_FROM, SWEEP_TO = 20.0, 16000.0
 
-    def identify(self, spk_id: str, seconds: float = 1.5, kind: str = "noise", samples=None) -> None:
-        """Play a test sound on one speaker only. kind "noise" is a short burst
+    def identify(self, spk_id, seconds: float = 1.5, kind: str = "noise", samples=None) -> None:
+        """Play a test sound on one speaker only (spk_id), or on several (a list of ids).
+        kind "noise" is a short burst
         of pink noise, "sweep" a tone gliding from deep bass to high treble,
         which makes the speaker's frequency limits easy to hear. kind "custom"
         plays samples (mono, at the engine's sample rate), a sound the user added."""
@@ -242,7 +252,9 @@ class Engine:
         self._identify_kind = kind
         self._identify_total = int(seconds * self.sr)
         self._sweep_phase = 0.0
-        self._identify_id = spk_id
+        ids = (spk_id,) if isinstance(spk_id, str) else tuple(spk_id)
+        self._identify_ids = frozenset(ids)
+        self._identify_id = ids[0] if len(ids) == 1 else ""
         self._identify_left = self._identify_total
 
     @property
@@ -388,6 +400,21 @@ class Engine:
             self._click_cache[key] = wave
         return wave
 
+    CLOCK_CREEP = 0.0002     # the audio clock may run this much slower than the PC's (s per s)
+
+    def _tie_clock(self, n: int) -> None:
+        """Works out when the first sample of this block was due, by the PC's clock. A block
+        is never handed over before its time, only late (several come together), so the
+        earliest arrival seen tells where the engine's samples sit on the clock."""
+        now = time.perf_counter()
+        first = self._samples - n
+        candidate = now - first / self.sr
+        if self._anchor is None or candidate < self._anchor:
+            self._anchor = candidate
+        else:
+            self._anchor += min(candidate - self._anchor, self.CLOCK_CREEP * n / self.sr)
+        self._block_wall = self._anchor + first / self.sr
+
     def _metronome(self, n: int, metro) -> dict:
         """{speaker id: (n,) samples} for this block."""
         bpm, targets, turns = metro
@@ -410,6 +437,7 @@ class Engine:
                 accent = beat % 4 == 0
             for spk_id, low in chosen:
                 self._metro_active.append((spk_id, self._metro_next, self._click(low, accent)))
+            self.click_times.append(self._block_wall + (self._metro_next - start) / self.sr)
             self._metro_beat += 1
             self._metro_next += period
         out = {}
@@ -497,6 +525,7 @@ class Engine:
             x = self.fun_chain.process(x, fun, self.sr, self.source_roles)
         matrix = plan.matrix
         self._samples += n
+        self._tie_clock(n)
         if plan.stereo_matrix is not None:
             if plan.extra_channels and float(np.max(peaks[list(plan.extra_channels)])) > QUIET:
                 self._surround_until = self._samples + int(SURROUND_HOLD_S * self.sr)
@@ -529,11 +558,13 @@ class Engine:
         if "spin" in fun or self._spin_mix > 0.0:
             bus = self._spin(bus, plan.room, fun.get("spin"))
 
-        ident_id = self._identify_id if self._identify_left > 0 else ""
+        ident_ids = self._identify_ids if self._identify_left > 0 else frozenset()
+        ident_id = bool(ident_ids)
         noise = None
         if ident_id:
             noise = self._test_sound(n)
             self._identify_left -= n
+        test_gain = self.test_gain
         metro = self._metro
         clicks = None
         if metro[0] > 0 and metro[1]:
@@ -543,6 +574,11 @@ class Engine:
         roam = self._roam
         if roam[0] and roam[1] and roam[2] != self.sweep_done:
             clicks = self._sweep(n, roam)                   # the PC sound waits meanwhile
+        if test_gain != 1.0:
+            if noise is not None:
+                noise = noise * test_gain
+            if clicks:
+                clicks = {spk_id: wave * test_gain for spk_id, wave in clicks.items()}
 
         want = plan.master * self.windows_gain
         if self._master_now != want:
@@ -558,7 +594,7 @@ class Engine:
             out = np.zeros((n, dev.channels), dtype=np.float32)
             for sp in dev.speakers:
                 if ident_id:
-                    sig = noise if sp.spk_id == ident_id else silence
+                    sig = noise if sp.spk_id in ident_ids else silence
                 elif clicks is not None:
                     sig = clicks.get(sp.spk_id, silence)      # the PC sound waits meanwhile
                 elif self.test_only or not sp.plays:
@@ -632,6 +668,7 @@ class AdaptiveFifo:
     MARGIN_S = 0.003     # room for the uneven timing of Windows, to start with
     MARGIN_STEP_S = 0.003    # more room after each time the device ran dry while sound flowed
     MARGIN_MAX_S = 0.04
+    BURST_MAX_S = 0.025  # never plan for more than this arriving at once (a stall's backlog)
     CALM_S = 20.0        # this long without running dry: give back a millisecond of that room
     GIVE_BACK_S = 0.001
 
@@ -647,6 +684,13 @@ class AdaptiveFifo:
         self.base = self.sr / float(out_rate) if out_rate else 1.0
         self.block = int(block)
         self._calm = 0                       # frames played since the device last ran dry
+        # Windows hands the PC sound over in packets (10 ms each, usually), which can hold
+        # several of our blocks: at 192 kHz four of them arrive together, then nothing for
+        # 10 ms. The buffer has to bridge that gap, so it learns how much arrives at once.
+        self._burst = 0
+        self._burst_peak = self.block
+        self._read_between = True            # the device took sound since the last block came
+        self._burst_cap = int(self.BURST_MAX_S * self.sr)
         self._max_read = self.block          # until the device asks, guess its blocks match ours
         self._margin = int(self.MARGIN_S * sr) if self.block else 0
         self._last_write = 0.0
@@ -674,7 +718,8 @@ class AdaptiveFifo:
         timing. 0 without a block size."""
         if not self.block:
             return 0
-        return self.block + self.block // 2 + self._margin
+        step = max(self.block, self._burst_peak)
+        return step + step // 2 + self._margin
 
     def set_target(self, frames: int) -> None:
         """Every output gets the same target, so they all stay the same distance
@@ -706,8 +751,16 @@ class AdaptiveFifo:
 
     def write(self, block: np.ndarray) -> None:
         with self._lock:
-            self._last_write = time.perf_counter()
+            now = time.perf_counter()
             n = len(block)
+            # blocks that arrive within a moment of each other, with the device taking
+            # nothing in between, came in one packet from Windows
+            together = not self._read_between and now - self._last_write < 0.002
+            self._burst = self._burst + n if together else n
+            if self._burst > self._burst_peak and self.block:
+                self._burst_peak = min(self._burst, max(self._burst_cap, self.block))
+            self._read_between = False
+            self._last_write = now
             if n > self._cap:
                 block, n = block[-self._cap:], self._cap
             if self._n + n > self._cap or self._n > self.target * 4:
@@ -721,6 +774,7 @@ class AdaptiveFifo:
 
     def read(self, frames: int) -> np.ndarray:
         with self._lock:
+            self._read_between = True
             used_frames = int(math.ceil(frames * self.base))   # in the engine's samples
             if used_frames > self._max_read and self.block:
                 self._max_read = used_frames         # the device takes bigger blocks than guessed
@@ -743,7 +797,8 @@ class AdaptiveFifo:
                 self._calm = 0
                 # ran dry while sound was still arriving: this device needs more room.
                 # (When the PC simply stops sending, nothing is learned from it.)
-                if self.block and time.perf_counter() - self._last_write < 2.5 * self.block / self.sr:
+                flowing = max(2.5 * max(self.block, self._burst_peak) / self.sr, 0.03)
+                if self.block and time.perf_counter() - self._last_write < flowing:
                     self._margin = min(self._margin + int(self.MARGIN_STEP_S * self.sr),
                                        int(self.MARGIN_MAX_S * self.sr))
                 return np.zeros((frames, self.channels), dtype=np.float32)

@@ -345,6 +345,33 @@ class AppState(QObject):
             if not entry:
                 self.notice.emit("That test sound place is empty. Add a sound on the Settings page.")
                 return
+        self._play_test([spk_id], kind, entry, f"{spk.name} of {dev.title}")
+
+    def playing_speakers(self) -> list:
+        """The ids of every speaker that plays: its output ticked, a role, not muted and, while
+        any speaker is soloed, soloed itself."""
+        p = self.project
+        any_solo = any(s.solo for d, s in p.all_speakers() if d.enabled)
+        return [s.id for d, s in p.all_speakers()
+                if d.enabled and s.role != OFF and not s.mute and (s.solo or not any_solo)
+                and s.channel < d.channels]
+
+    def identify_all(self, kind: str = "noise") -> None:
+        """A test sound on every speaker that plays at once (nothing is selected)."""
+        ids = self.playing_speakers()
+        if not ids:
+            self.notice.emit("No speaker plays: tick an output and give its speakers a role first.")
+            return
+        entry = None
+        if kind.startswith("custom"):
+            slot = int(kind[6:] or 0) - 1
+            entry = self.settings.test_sounds[slot] if 0 <= slot < len(self.settings.test_sounds) else {}
+            if not entry:
+                self.notice.emit("That test sound place is empty. Add a sound on the Settings page.")
+                return
+        self._play_test(ids, kind, entry, f"all {len(ids)} speakers" if len(ids) > 1 else "your speaker")
+
+    def _play_test(self, ids: list, kind: str, entry, where: str) -> None:
         if not self.runner.running:
             self.start(temporary=True)
             if not self.runner.running:
@@ -358,13 +385,13 @@ class AppState(QObject):
                 self._end_temporary_run()
                 return
             seconds = len(samples) / self.engine.sr
-            self.engine.identify(spk_id, seconds, "custom", samples)
+            self.engine.identify(ids, seconds, "custom", samples)
             what = f"\"{entry['name']}\""
         else:
             seconds = 4.0 if kind == "sweep" else 1.5
-            self.engine.identify(spk_id, seconds, kind)
+            self.engine.identify(ids, seconds, kind)
             what = "a sweep from low to high" if kind == "sweep" else "a short noise"
-        self.notice.emit(f"Playing {what} on {spk.name} of {dev.title}")
+        self.notice.emit(f"Playing {what} on {where}")
         if self._temporary_run:
             QTimer.singleShot(int(seconds * 1000) + 400, self._end_temporary_run)
 
@@ -525,6 +552,21 @@ class AppState(QObject):
         self.engine.set_metronome(bpm or self.settings.metronome_bpm, targets, False)
         self.metronomeChanged.emit()
         return True
+
+    TEST_BOOST_RANGE = (-12.0, 12.0)
+
+    def boost_tests(self, db) -> None:
+        """Test sounds this many dB louder (or quieter), for as long as a test panel is open.
+        None: back to normal. The amount is remembered for the next time."""
+        if db is None:
+            self.engine.test_gain = 1.0
+            return
+        lo, hi = self.TEST_BOOST_RANGE
+        db = float(min(max(float(db), lo), hi))
+        if self.settings.test_boost_db != db:
+            self.settings.test_boost_db = db
+            self.save_settings()
+        self.engine.test_gain = 10.0 ** (db / 20.0)
 
     def stop_metronome(self) -> None:
         self._clicks_fixed = False
