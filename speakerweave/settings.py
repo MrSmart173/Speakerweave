@@ -10,7 +10,22 @@ SETUP_SLOTS = 4
 TEST_SOUNDS = 5
 
 
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 3
+UI_SCALES = (75, 85, 100, 110, 125, 150, 175, 200)
+
+
+def clean_scale(value) -> int:
+    """An interface size SpeakerWeave offers, in %; anything else becomes the nearest one."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return 100
+    return min(UI_SCALES, key=lambda s: abs(s - value))
+
+
+def _default_tone() -> dict:
+    from .tones import clean
+    return clean({})
 
 
 @dataclass
@@ -31,7 +46,8 @@ class AppSettings:
     bindings: list = field(default_factory=list)          # see controls.py
     setup_slots: list = field(default_factory=lambda: [""] * SETUP_SLOTS)
     tray_hint_shown: bool = False
-    theme: str = "midnight"             # a preset name from ui/theme.py, or "custom"
+    theme: str = "studio"               # a preset name from ui/theme.py, or "custom"
+    look: str = "studio"                # how widgets are drawn: "studio" or "classic"
     custom_colors: dict = field(default_factory=dict)      # bg, panel, line, text, accent
     test_sounds: list = field(default_factory=lambda: [{} for _ in range(TEST_SOUNDS)])
     # make the device SpeakerWeave listens to the Windows default output when it opens
@@ -43,7 +59,10 @@ class AppSettings:
     name_virtual_device: bool = True    # call VB-CABLE's output "SpeakerWeave Virtual Speaker output"
     follow_windows_volume: bool = True  # the Windows volume (keys, mouse wheel) sets the speakers' too
     volume_at_start_0: bool = True      # SpeakerWeave's volume starts at 0 dB every time it opens
-    show_levels: bool = True            # the level meters under the room map
+    ui_scale: int = 100                 # interface size in %, on top of Windows' own scaling
+    show_levels: bool = True            # the level meters along the bottom of the window
+    levels_pinned: bool = True          # they stay up; unpinned they slide up on a hover
+    furniture_on: bool = False          # desks and sim rigs can be added to the room map
     show_now_playing: bool = True       # what is playing on the PC, under the room map
     media_popup: bool = True            # a popup in the corner when a new song or video starts
     simhub_link: bool = True            # answer the SpeakerWeave plugin in SimHub
@@ -59,6 +78,9 @@ class AppSettings:
     hidden_outputs: dict = field(default_factory=dict)
     # sound effects for fun: {effect key: {"amount": slider value, "seconds": play for}}
     fun: dict = field(default_factory=dict)
+    tone: dict = field(default_factory=lambda: _default_tone())   # the tone generator's last tone
+    tone_target: str = "all"                            # all, selected, or a speaker id
+    tone_patterns: dict = field(default_factory=dict)   # patterns you saved: name -> steps
 
     def save(self, path: str) -> None:
         tmp = path + ".tmp"
@@ -78,6 +100,9 @@ class AppSettings:
         if int(data.get("version", 1) or 1) < 2:
             # from settings version 2 on, the sound simply runs while SpeakerWeave is open
             settings.start_sound = True
+        if int(data.get("version", 1) or 1) < 3 and settings.theme == "midnight":
+            # midnight was the only look before version 3: the new default takes over
+            settings.theme, settings.look = "studio", "studio"
         settings.version = SETTINGS_VERSION
         if not isinstance(settings.bindings, list):
             settings.bindings = []
@@ -106,4 +131,12 @@ class AppSettings:
         settings.games_seen = [str(g) for g in settings.games_seen if g][:40]
         from .fun import clean_settings
         settings.fun = clean_settings(settings.fun)
+        settings.ui_scale = clean_scale(settings.ui_scale)
+        if settings.look not in ("studio", "classic"):
+            settings.look = "studio"
+        from .tones import clean as clean_tone, clean_patterns
+        settings.tone = clean_tone(settings.tone)
+        if not isinstance(settings.tone_target, str) or not settings.tone_target:
+            settings.tone_target = "all"
+        settings.tone_patterns = clean_patterns(settings.tone_patterns)
         return settings

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
 
 from .. import autostart, sounds, updates, windefault
 from ..release import version_name
+from ..settings import UI_SCALES
 from ..settings import AppSettings
 from . import theme
 from .panels import dim, scrolled
@@ -144,6 +145,10 @@ class SettingsPage(QWidget):
         v = QVBoxLayout(box)
         self.meters = QCheckBox("Show how loud each speaker is playing on the map")
         v.addWidget(self.meters)
+        self.furniture = QCheckBox("Desks and sim rigs on the map")
+        self.furniture.setToolTip("Draw your desk, or a racing or flight simulator rig, on the room map. "
+                                  "Right click an empty spot on the map to add one.")
+        v.addWidget(self.furniture)
         col.addWidget(box)
 
         box = QGroupBox("Now playing")
@@ -216,6 +221,7 @@ class SettingsPage(QWidget):
         self.watch.toggled.connect(lambda v: self._set("watch_devices", v))
         self.library.toggled.connect(lambda v: self._set("apply_library", v))
         self.meters.toggled.connect(self._meters_toggled)
+        self.furniture.toggled.connect(self._furniture_toggled)
         self.now_bar.toggled.connect(self._now_bar_toggled)
         self.now_popup.toggled.connect(lambda v: self._set("media_popup", v))
         self.updates_box.toggled.connect(lambda v: self._set("check_updates", v))
@@ -238,6 +244,15 @@ class SettingsPage(QWidget):
         box = QGroupBox("Look")
         v = QVBoxLayout(box)
         row = QHBoxLayout()
+        row.addWidget(QLabel("Style"))
+        self.look_box = QComboBox()
+        self.look_box.addItem("Studio: flat grey panels, compact, like a video editor", "studio")
+        self.look_box.addItem("Classic: the first SpeakerWeave look, rounded and roomier", "classic")
+        self.look_box.setToolTip("How buttons, boxes and panels are drawn. Classic also brings back the "
+                                 "Midnight colours and the Classic layout of panels.")
+        row.addWidget(self.look_box, 1)
+        v.addLayout(row)
+        row = QHBoxLayout()
         row.addWidget(QLabel("Colours"))
         self.theme_box = QComboBox()
         for key, (name, note, colors) in theme.PRESETS.items():
@@ -250,6 +265,17 @@ class SettingsPage(QWidget):
         v.addWidget(dim("The presets were picked with the colour harmony rules of Adobe Color. "
                         "Choose Your own colours to make your own, or to bring in a theme from "
                         "Adobe Color."))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Interface size"))
+        self.scale_box = QComboBox()
+        for percent in UI_SCALES:
+            self.scale_box.addItem(f"{percent}%" + ("  (regular size)" if percent == 100 else ""), percent)
+        self.scale_box.setToolTip("Makes everything in SpeakerWeave bigger or smaller. It goes on top "
+                                  "of the display scaling Windows uses, which SpeakerWeave follows by "
+                                  "itself on every screen.")
+        row.addWidget(self.scale_box)
+        row.addStretch(1)
+        v.addLayout(row)
 
         self.custom_box = QWidget()
         c = QVBoxLayout(self.custom_box)
@@ -291,16 +317,37 @@ class SettingsPage(QWidget):
         v.addWidget(self.custom_box)
 
         self.theme_box.activated.connect(self._theme_chosen)
+        self.look_box.activated.connect(
+            lambda _i: self.window.use_look(self.look_box.currentData()))
+        self.scale_box.activated.connect(self._scale_chosen)
         self.use_paste.clicked.connect(self._use_paste)
         self.paste.returnPressed.connect(self._use_paste)
         self.load_ase.clicked.connect(self._load_ase)
         self.open_adobe.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(ADOBE_COLOR)))
         return box
 
+    def _scale_chosen(self, _i: int = 0) -> None:
+        percent = int(self.scale_box.currentData())
+        if percent == self.state.settings.ui_scale:
+            return
+        self.state.settings.ui_scale = percent
+        self.state.save_settings()
+        answer = QMessageBox.question(
+            self, "Interface size",
+            f"SpeakerWeave shows at {percent}% from the next time it opens. Restart it now?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if answer == QMessageBox.Yes:
+            self.window.restart_app()
+
+    def load_look(self) -> None:
+        self._load_look()
+
     def _load_look(self) -> None:
         s = self.state.settings
+        self.look_box.setCurrentIndex(max(0, self.look_box.findData(theme.look_for(s))))
         index = self.theme_box.findData(s.theme)
         self.theme_box.setCurrentIndex(index if index >= 0 else 0)
+        self.scale_box.setCurrentIndex(max(0, self.scale_box.findData(s.ui_scale)))
         custom = s.theme == theme.CUSTOM
         self.custom_box.setVisible(custom)
         colors = theme.colors_for(s)
@@ -320,7 +367,7 @@ class SettingsPage(QWidget):
 
     def apply_theme(self) -> None:
         app = QApplication.instance()
-        theme.apply(app, theme.colors_for(self.state.settings))
+        theme.apply(app, theme.colors_for(self.state.settings), theme.look_for(self.state.settings))
         self.window.theme_changed()
         self._load_look()
 
@@ -523,6 +570,7 @@ class SettingsPage(QWidget):
         self.watch.setChecked(s.watch_devices)
         self.library.setChecked(s.apply_library)
         self.meters.setChecked(s.show_meters)
+        self.furniture.setChecked(s.furniture_on)
         self.now_bar.setChecked(s.show_now_playing)
         self.now_popup.setChecked(s.media_popup)
         self.updates_box.setChecked(s.check_updates)
@@ -571,6 +619,13 @@ class SettingsPage(QWidget):
     def _meters_toggled(self, on: bool) -> None:
         self._set("show_meters", on)
         self.window.map.update()
+
+    def _furniture_toggled(self, on: bool) -> None:
+        self._set("furniture_on", on)
+        room_map = getattr(self.window, "map", None)
+        if room_map is not None:
+            room_map.refit()
+            room_map.update()
 
     def _reset(self) -> None:
         answer = QMessageBox.question(self, "Reset settings",

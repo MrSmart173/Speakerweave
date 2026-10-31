@@ -35,6 +35,8 @@ def test_the_page_shows_the_numbers_and_the_last_two_minutes():
         runner.delay_ms = lambda: 21.0
         win.show_page(4)
         page = win.performance_page
+        page._timer.stop()                         # only the samples taken here
+        before = len(page.chart.data["cpu"])
         for _ in range(3):
             page.stats._last = (page.stats._last[0] - 1.0,) + page.stats._last[1:]   # a second on
             page.tick()
@@ -42,7 +44,7 @@ def test_the_page_shows_the_numbers_and_the_last_two_minutes():
         assert page.load.value.text() == "18%" and "31%" in page.load.note.text()
         assert page.delay.value.text() == "21 ms" and page.dropouts.value.text() == "3"
         assert page.cpu.value.text().endswith("%") and page.memory.value.text().endswith("MB")
-        assert len(page.chart.data["cpu"]) == 4 and page.chart.data["load"][-1] == 18.0
+        assert len(page.chart.data["cpu"]) == before + 3 and page.chart.data["load"][-1] == 18.0
         texts = [page.outputs.itemAt(i).widget().text() for i in range(page.outputs.count())]
         assert "Speakers" in texts and "+2 ppm" in texts or "+3 ppm" in texts
         shot = os.environ.get("SPEAKERWEAVE_SHOT")

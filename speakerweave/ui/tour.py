@@ -1,6 +1,6 @@
 """The first run tour: a spotlight walks over every part of the window with a short
 explanation, like the tours of Moza Pit House or Fanatec's app. It can be skipped at
-any step and taken again from the Setup menu."""
+any step and taken again from the Help menu."""
 from __future__ import annotations
 
 import html
@@ -227,11 +227,14 @@ def window_steps(win) -> list:
     def room():
         win.show_page(0)
 
-    def tab(widget):
-        def show():
+    def panel(key):
+        return lambda: win.workspaces.panel(key)
+
+    def show(key):
+        def bring():
             win.show_page(0)
-            win.tabs.setCurrentWidget(widget)
-        return show
+            win.workspaces.open(key)
+        return bring
 
     def page(index):
         return lambda: win.show_page(index)
@@ -246,14 +249,23 @@ def window_steps(win) -> list:
              "SpeakerWeave plays everything your PC plays on all your speakers at once, arranged "
              "as a stereo or surround system from 2.0 up to 7.1. This tour shows where everything "
              "is and takes about two minutes. Press Skip tour to leave it. You can take it again "
-             "any time from the Setup menu."),
+             "any time from the Help menu."),
+        Step("Panels and workspaces",
+             "Every part of the window is a panel, like in Adobe Premiere Pro. Drag a panel by its "
+             "name to move it: onto another panel to tab them together, onto an edge to put it "
+             "beside, or out of the window to float it. The menu beside a panel's name closes, "
+             "undocks or maximises it, and so does a double click on the name.\n\n"
+             "A workspace is a layout of panels. Pick one up here: Setup, Tune, Play or Classic. "
+             "Changes are kept, and Window > Workspaces resets a layout or saves it as your own.",
+             lambda: win.workspace_bar, room,
+             tip="Closed a panel? Window > Panels opens it again."),
         Step("Your sound outputs",
              "Every sound output currently connected to this PC is listed here. Everything from "
              "headphones, wired & Bluetooth speakers, speakers in your monitors etc.\n\n"
              "Tick each one (the box should fill in with your selected colour) that you would like "
              "to use together. Open an output to see its speakers, and click on a speaker to set "
              "it up.",
-             lambda: win.tree, room,
+             panel("outputs"), show("outputs"),
              tip="Right click an output you never use to hide it. It moves to Hidden by user at "
                  "the bottom of the list."),
         Step("What SpeakerWeave listens to",
@@ -270,10 +282,10 @@ def window_steps(win) -> list:
              lambda: win.start_btn, room),
         Step("Speaker mode",
              "Choose 2.0, 2.1, 4.0, 5.1, 7.1 or create a layout of your own with Custom, at the "
-             "bottom of this list. Positions shows which role every speaker plays in the mode.",
+             "bottom of this list, which also shows which role every speaker plays.",
              lambda: win.mode, room),
         Step("Volume",
-             "One volume for everything. Each speaker also has its own level on the Speaker tab.",
+             "One volume for everything. Each speaker also has its own level on the Speaker panel.",
              lambda: win.master, room),
         Step("The room map",
              "You sit in the middle. Drag the speakers, or use the side menu for finer "
@@ -282,55 +294,56 @@ def window_steps(win) -> list:
              "two channels, such as a Logitech Z906, shows its speakers as a shape with the "
              "subwoofer beside it. Select a unit and press Speakers attached to move its speakers "
              "one by one. Right click anything for more.",
-             lambda: win.map, room),
+             lambda: win.map, show("room")),
         Step("Test and tune",
              "Test sound plays on the selected speaker (with none selected, on every speaker). Set "
-             "roles gives every speaker the role of the place it sits in. Easy sync lines up the "
-             "timing of your speakers, by ear two at a time or by tapping along to each one, and "
-             "Line up delays does it from the distances on the map. Mirror moves "
+             "roles gives every speaker the role of the place it sits in. Sync lines up the "
+             "timing of your speakers: by ear two at a time, by tapping along to each one, or "
+             "from the distances on the map. Mirror moves "
              "pairs of speakers together, and Metronome ticks on your speakers so you can hear "
              "whether they play in time.",
-             lambda: win.sync_btn, room),
+             lambda: win.sync_btn, show("room")),
         Step("Level meters",
              "At the bottom of your screen are sound bars to help visualize the sound that is "
              "being played. The first block is the sound of the PC, and every output has its own "
-             "block with a bar for each channel. The Levels button shows or hides them.",
-             lambda: win.levels if win.levels.isVisible() else win.levels_btn, room),
-        Step("Speaker tab",
+             "block with a bar for each channel. The pin keeps them up. Unpinned, they hide in a "
+             "thin strip and slide up when you rest the mouse on it.",
+             lambda: win.levels_drawer if win.levels_drawer.isVisible() else win.menuBar(), room),
+        Step("Speaker panel",
              "Everything about the selected speaker: its role, volume and delay, its own "
              "equaliser, the lowest and highest sounds it plays, and its light.",
-             lambda: win.tabs, tab(win.speaker_panel)),
-        Step("Output tab",
+             panel("speaker"), show("speaker")),
+        Step("Output panel",
              "The selected output as a whole: its name, what kind of unit it is, its speaker "
              "model, its place in the room and a trim for all its speakers.",
-             lambda: win.tabs, tab(win.device_panel)),
-        Step("Sound tab",
+             panel("output"), show("output")),
+        Step("Sound panel",
              "How the sound is shared out: the incoming channel layout, filling speakers the "
              "source has no channel for, bass to the subwoofer, the safety buffer and the size "
              "of the room.",
-             lambda: win.tabs, tab(win.sound_panel)),
-        Step("Lights tab",
+             panel("sound"), show("sound")),
+        Step("Lights panel",
              "Make RGB lights move with the sound through OpenRGB, with a colour for every "
              "speaker role.",
-             lambda: win.tabs, tab(win.lights_panel)),
-        Step("Effects tab",
+             panel("lights"), show("lights")),
+        Step("Effects panel",
              "Link SimHub so every game loads its own speaker setup, set up a ButtKicker or other "
              "bass shaker, and send SimHub effects such as tyres and impacts, or a spotter app, to "
              "the speakers you pick.",
-             lambda: win.tabs, tab(win.extras_panel)),
+             panel("effects"), show("effects")),
         Step("Errors",
              "If something keeps the sound from your speakers, or the surround is not right, it "
-             "is listed on this page with a button that fixes it. The number on the button shows "
+             "is listed in this panel with a button that fixes it. The number on the button shows "
              "how many problems there are.",
              lambda: win.errors_btn, page(3)),
         Step("Controls",
              "Put SpeakerWeave's actions on keys, wheel and button box buttons, a Stream Deck or "
              "SimHub: volume, mute, speaker modes and saved setups.",
-             lambda: win.nav.button(1), page(1)),
+             panel("controls"), page(1)),
         Step("Settings",
              "Colours, your own test sounds, the Windows sound output, starting with Windows, "
              "updates, and Uninstall at the bottom.",
-             lambda: win.nav.button(2), page(2)),
+             panel("settings"), page(2)),
         Step("Fun",
              "Sound effects for everything the PC plays: bass boost, chipmunk or deep voice, robot, "
              "echo, the whole sound spinning round the room and more. Switch one on, or play it "
@@ -339,12 +352,14 @@ def window_steps(win) -> list:
         Step("Performance",
              "How much of the processor and memory SpeakerWeave uses, and how well the sound keeps "
              "up on every output.",
-             lambda: win.nav.button(4), page(4)),
-        Step("The Setup menu",
-             "Save a setup and open it again, open the full guide, and take this tour again.",
-             lambda: win.setup_btn, room),
+             panel("performance"), page(4)),
+        Step("The menus",
+             "File saves a setup and opens it again, and has Settings and Controls. Sound starts, "
+             "rescans and tests. Window opens panels, switches workspaces and changes the look "
+             "(Studio, or the Classic look). Help has the full guide and this tour.",
+             lambda: win.menuBar(), room),
         Step("You are ready",
              "Tick your outputs, place your speakers on the map and play something. If anything "
-             "sounds wrong, the Errors page tells you why.",
+             "sounds wrong, the Errors panel tells you why.",
              None, room),
     ]

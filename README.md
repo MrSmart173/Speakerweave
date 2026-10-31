@@ -9,6 +9,17 @@ shape its sound.
 
 ## What it can do
 
+* A window made of panels, the way Adobe Premiere Pro works: drag any panel by its name to
+  tab it with another, put it beside another or float it, close the ones you don't need and
+  save the layout as a workspace of your own. Setup, Tune, Play and Classic come built in
+* Two looks: Studio (flat grey panels, compact, the default) and Classic (the first look),
+  any of seven colour themes or your own colours, and an interface size from 75% to 200% on
+  top of the Windows display scaling
+* A tone generator: any pitch from 1 Hz to 20,000 Hz as a steady tone, beeps, a pattern of
+  notes and rests, or a sweep, on every speaker or the ones you pick
+* Desks and sim rigs on the room map (switched on in Settings): a rectangle, U shaped or
+  corner desk, and a racing or flight cockpit of aluminium profile with its seat, wheel or
+  stick, pedals, and a shifter and handbrake on whichever side you like
 * Modes from 2.0 up to 7.1 (2.0, 2.1, 3.0, 3.1, 4.0, 4.1, 5.0, 5.1, 6.0, 6.1, 7.0, 7.1)
 * 4.0, 4.1, 5.0 and 5.1 with the surround pair at your sides (SL SR) or behind you (RL RR)
 * Custom: tick any combination of positions, with up to four subwoofers
@@ -16,7 +27,7 @@ shape its sound.
 * Room map: drag screens, loose speakers and your own seat to where they really are. It zooms
   itself to fit your speakers, from a desk monitor half a metre away to a rig two metres wide,
   and keeps every distance true
-* A Fun page of sound effects: bass boost, chipmunk or deep voice, robot, distortion,
+* A Fun panel of sound effects: bass boost, chipmunk or deep voice, robot, distortion,
   telephone, underwater, echo, stadium, 8 bit, karaoke and the whole sound spinning round the
   room. Each one on or off, or for a set time, from its card, a key, a controller button or a
   Stream Deck
@@ -37,7 +48,7 @@ shape its sound.
 * Now playing: the song or video playing on the PC (Spotify, Apple Music, YouTube and more)
   under the map with play, pause and skip, and a popup that closes itself after 5 seconds
 * Microphones on the room map, placed where they really are, glowing with what they hear
-* A Performance page with SpeakerWeave's share of the processor and memory, how hard the
+* A Performance panel with SpeakerWeave's share of the processor and memory, how hard the
   sound work runs, delay, dropouts and a two minute chart
 * Colour themes: six presets, or your own colours, also straight from Adobe Color
 * Plays by itself as soon as it opens, and makes itself the Windows sound output while it
@@ -49,7 +60,7 @@ shape its sound.
   or loose, and switching back and forth keeps the loose places
 * Level meters like a mixer: one block for the PC sound and one per output, with a bar for
   every channel
-* An Errors page that lists anything keeping the sound from your speakers or spoiling the
+* An Errors panel that lists anything keeping the sound from your speakers or spoiling the
   surround, each with a button that fixes it. The Errors button flashes red for an error and
   lights yellow for a new warning, and a note at startup sums up what is wrong
 * Bass shakers (ButtKicker and other tactile transducers) as a speaker role, limited to the
@@ -81,7 +92,7 @@ installed** ticked and it opens by itself. Nothing else is needed. The title bar
 the copy you are running was built (or "from source" when it runs from this folder), so it
 is easy to tell an old installation from a new one. The app looks for newer
 versions by itself when it opens and every six hours. When one is out, a note appears by the
-**Errors** button and the Errors page lists it under **Notices**, with what's new and a
+**Errors** button and the Errors panel lists it under **Notices**, with what's new and a
 button that installs it. **Setup > Check for updates** looks right away.
 
 **From this folder, for development.**
@@ -97,17 +108,54 @@ error text. Errors are also written to `error log.txt` in
 
 To build the installer yourself, see `RELEASING.md`.
 
+## The window: panels and workspaces
+
+Everything in the window is a panel with its name on a tab at the top: Outputs, Room, Now
+playing, Speaker, Output, Sound, Lights, Effects, Tone generator, Fun, Errors, Controls,
+Settings and Performance. It works like the panels of Adobe Premiere Pro:
+
+* **Move a panel** by dragging its name. Drop it in the middle of another panel to tab them
+  together, near an edge of one to put it beside or above it, or outside the window to float
+  it as a window of its own.
+* **The panel menu** (the three lines beside a panel's name, or a right click on the name)
+  closes the panel, undocks it, closes the other panels in its group, or maximises it.
+* **Maximise** a panel to fill the window with a double click on its name, or the ` key (left
+  of 1) over it. The same again puts everything back.
+* **Window > Panels** opens a closed panel again. A panel that was never placed opens as a
+  tab beside the Room. Fun and Errors on the top bar, and **File > Settings** (Ctrl+,), do the
+  same for their panels.
+
+A **workspace** is a layout of panels. Pick one along the top of the window:
+
+| Workspace | What it shows |
+| --- | --- |
+| Setup | Outputs and Now playing, the Room, and the selected speaker with the Output, Sound, Lights and Effects panels |
+| Tune | The selected speaker and the Sound panel beside the room, for timing and levels |
+| Play | The room, Fun and Now playing, while you play or watch |
+| Classic | The layout SpeakerWeave had before panels |
+
+Changes to a workspace are remembered, also after closing SpeakerWeave. **Window >
+Workspaces** (or » beside the workspace names) has **Reset to saved layout**, **Save changes
+to this workspace**, **Save as new workspace...** and **Edit workspaces...** to rename or delete
+the ones you made. The layouts are kept in `workspaces.json` beside the settings.
+
+The menus along the top: **File** (setups, Settings, Controls, Quit), **Sound** (start and
+stop, look for sound devices again with F5, speaker positions, Bluetooth, Sync, Test sound,
+Metronome and the Tone generator), **Window** (workspaces, panels, the level meters and the
+look) and **Help** (the guide with F1, the tour, updates and About).
+
 ## First steps: map your speakers
 
 The first time SpeakerWeave opens, a short tour shows where everything is. Take it again any
-time from **Setup > Take the tour**.
+time from **Help > Take the tour**.
 
 You can do all of this before setting up anything else, using the built in test signal.
 
 1. In the list on the left, tick every sound output you want to use (your three TVs, a
    sound card and so on). Each one appears on the room map.
-2. Pick the **Mode** at the top (for example 5.1), or press **Positions** to tick exactly
-   the speaker positions your room has (see below).
+2. Pick the **Mode** at the top (for example 5.1), or choose **Custom...** at the bottom of
+   that list (also **Sound > Speaker positions**) to tick exactly the speaker positions your
+   room has (see below).
 3. Drag the screens and the **You** marker to where they are in your room. Scroll over a
    screen to turn it. The faint ring around you shows the ideal spot for each role.
    The map zooms itself so everything fits (**Fit** is lit), also when the window changes
@@ -115,7 +163,7 @@ You can do all of this before setting up anything else, using the built in test 
    buttons in its top left corner, the mouse wheel over an empty spot (or Ctrl and the wheel
    anywhere), and the + and − keys zoom by hand. Distances never change, only how big the
    map is drawn. **100%** shows the whole room, and **Fit** turns fitting back on. In a window
-   too small for everything, scroll bars appear at the bottom and right.
+   too small for everything, the Room panel gets scroll bars instead of squashing the map.
 4. Press **Set roles**, or click each speaker and choose its **Role** by hand.
 5. Leave **Listen to** on **Test signal** and press **Start**. A noise walks from channel to
    channel, and the speaker that should be playing gets a white ring on the map. If the wrong
@@ -126,7 +174,7 @@ You can do all of this before setting up anything else, using the built in test 
 
 Right click an output in the list and choose **Hide this output**. It moves into **Hidden by
 user**, a folder at the bottom of the list, and leaves the map, every saved setup and the
-Errors page alone. Its place on the map and its settings are kept. Right click it there and
+Errors panel alone. Its place on the map and its settings are kept. Right click it there and
 choose **Show this output again** to bring it back as it was.
 
 When a hidden output is plugged in again, the folder flashes and a note says the device has
@@ -159,8 +207,8 @@ Press **Mirror** under the map and the partner speaker follows: the opposite way
 the same way front to back. So a sideways drag changes the spacing evenly on both sides,
 and a front to back drag moves both ends together.
 
-The numbers under **Position in the room** follow while you drag, on the Output tab for a
-whole screen and on the Speaker tab for a single speaker. You can also type exact values
+The numbers under **Position in the room** follow while you drag, on the Output panel for a
+whole screen and on the Speaker panel for a single speaker. You can also type exact values
 there.
 
 Your example from the request, three TVs in a row, looks like this in mode 6.0:
@@ -189,11 +237,11 @@ Windows goes back to the output it used before.
 
 While only the two front channels carry sound (music, most videos), SpeakerWeave spreads them
 over every speaker. As soon as a game sends surround, each channel goes to its own speaker.
-The **Errors** page shows which of the two is happening right now.
+The **Errors** panel shows which of the two is happening right now.
 
 If a game or app lets you choose its sound output, choose **SpeakerWeave Virtual Speaker
 output**. Uninstalling SpeakerWeave gives the device its own name back, and **Call the virtual
-device "SpeakerWeave Virtual Speaker output"** on the Settings page switches the renaming off.
+device "SpeakerWeave Virtual Speaker output"** on the Settings panel switches the renaming off.
 
 ## Now playing
 
@@ -201,10 +249,10 @@ When music or a video plays on the PC (Spotify, Apple Music, YouTube in a browse
 that Windows' own media controls show), its title, artist and picture appear in a strip under
 the map, with previous, play or pause, and next. When a new song or video starts, a small
 popup shows it in the corner of the screen. It closes itself after 5 seconds (it waits while
-the mouse is on it), or straight away with its X. Both can be switched off on the Settings
-page under **Now playing**.
+the mouse is on it), or straight away with its X. Both can be switched off in the Settings
+panel under **Now playing**.
 
-Each step can be switched off on the **Settings** page under **Windows sound output**, and
+Each step can be switched off on the **Settings** panel under **Windows sound output**, and
 **Listen to** at the top can be set by hand. You can listen to a normal output device instead
 of a virtual one, but then that device still plays the original sound itself and cannot be
 used as part of the setup. A recording device (line in, a capture card, a microphone) can be
@@ -216,7 +264,7 @@ A unit with more than two channels, such as a Logitech Z906, a 5.1 or 7.1 sound 
 AV receiver, shows on the map as a ring of its own speakers in their surround places, with
 its subwoofer off to the left. When you tick it, the mode follows its channels (5.1 for six,
 7.1 for eight). Drag the ring to move the whole unit, and set how big it is with **Size
-across** on the Output tab.
+across** on the Output panel.
 
 Select a unit and press **Speakers attached** at the top right of the map (or right click it) to
 switch to **Speakers loose**. Every speaker can then be dragged on its own. Press it again
@@ -229,23 +277,75 @@ gaming headsets whose software turns on virtual surround (Logitech G HUB, Corsai
 Synapse), and PC soundbars such as the Creative Katana V2. When SpeakerWeave recognises one
 by its name, it shows what is really there: a headset's two sides, or two speakers and a
 subwoofer, in front of you. The mode stays as it was and the other channels are left silent.
-To use every channel Windows offers anyway, set **Speaker model** on the Output tab to
+To use every channel Windows offers anyway, set **Speaker model** on the Output panel to
 **Not chosen**. A TV, receiver or sound card keeps every channel: when those offer 5.1 or
 7.1, the speakers are really there.
 
 ## Level meters
 
-**Levels** under the map shows meters like the mixer in OBS: the first block is the PC sound
+**Levels** along the bottom of the window shows meters like the mixer in OBS: the first block is the PC sound
 coming in, and every ticked output has its own block with a bar for each channel, labelled
 L and R, or FL, FR, C, SUB and so on for surround. Green is comfortable, yellow is loud, red
 is close to clipping. The thin line above each bar holds the latest peak for a moment.
 
+The pin in their top right corner keeps them up (pinned is how they start). Unpinned, they
+fold into a thin strip along the bottom: rest the mouse on the strip for half a second and
+they slide up over the panels, and they slide away again once the mouse has left them, the way
+Word shows a collapsed ribbon. **Window > Levels** hides them altogether, and **Window > Pin
+the levels** pins them again.
+
+## Tone generator
+
+**Sound > Tone generator** opens a panel that plays a tone of any pitch from 1 Hz to 20,000 Hz
+instead of the PC sound (which waits meanwhile):
+
+* **Frequency**: type it, or drag the slider, which gives every octave the same room. The
+  buttons jump to 50 Hz, 100 Hz, 440 Hz, 1 kHz and 10 kHz, and ÷2 and ×2 go an octave down
+  or up.
+* **Wave**: sine (a pure tone), square, triangle or saw (brighter, easier to hear on small
+  speakers). They are all drawn so a high tone does not fold back into a buzz of lower ones,
+  and they all play equally loud at the same **Level**.
+* **Steady tone** plays until **Stop**. Pitch, wave and level follow the controls while it
+  plays.
+* **Beeps**: how long each beep is, the gap between them, and how many (or until stopped).
+* **Pattern**: notes and rests of your own (a pitch in Hz, 0 for a rest, and a length in
+  milliseconds), or a ready made one: two tone alarm, countdown, SOS, a scale, octaves from
+  31.5 Hz to 16 kHz to check every speaker, and a heartbeat. **Save...** keeps a pattern under
+  a name of your own.
+* **Sweep**: from one pitch to another over a time you choose, evenly through the octaves or
+  in a straight line, there and back if you like, once or many times.
+* **Play on**: every speaker that plays, the selected speaker (it follows the selection), or
+  any one speaker.
+
+Every speaker still filters the tone the way it filters music, so a satellite with a bass cut
+does not get the 20 Hz part. Start quietly: very low, very high and long loud tones can damage
+speakers and hearing, and the panel warns below 20 Hz and at loud levels.
+
+## Desks and sim rigs
+
+Switch on **Desks and sim rigs on the map** under **Room map** in Settings, then right click an
+empty spot on the room map:
+
+* **Add a desk**: a rectangle, a U shape (a long top with sides that come straight out towards
+  you), or a corner desk (an L with an angled inside corner, the return on either side).
+* **Add a sim rig**: a racing cockpit of aluminium profile seen from above, with a bucket seat,
+  wheelbase, wheel and pedals, or a flight cockpit with rudder pedals and a side stick and
+  throttle, a centre stick, or a yoke.
+
+A new piece is placed so you sit at it. Drag it to move it and scroll over it to turn it. A rig
+you sit in brings you along when it moves or turns, so the distances to your speakers stay
+right (**Sit me in it** puts you back in the seat). Right click a racing rig to switch the
+**Shifter** on or off, put the shifter and handbrake **on the left** or **on the right**, and
+add a **Handbrake**. A double click (or **Size and options...**) sets a desk's width, depth and
+sides, and turns any piece to an exact angle. Delete removes the selected one. Desks and rigs
+are saved with the setup, and switched off they are kept, just not drawn.
+
 ## Errors
 
 The **Errors** button at the top shows a number when something is wrong. While there is an
-error it flashes red (it stays steady while the Errors page is open). A new warning lights it
+error it flashes red (it stays steady while the Errors panel is open). A new warning lights it
 yellow for a second, then it goes back to your colours. When SpeakerWeave opens with
-something wrong, a note under the button sums it up, with **Go to Errors** or **Ignore**. The page lists
+something wrong, a note under the button sums it up, with **Go to Errors** or **Ignore**. The panel lists
 everything that keeps the sound from your speakers (no virtual device, Windows playing
 somewhere else, an output unplugged, a device refusing to open) and everything that spoils
 the surround (the virtual device set to stereo, missing speaker positions), each with a
@@ -254,12 +354,12 @@ tone through the whole chain, from Windows to every speaker, and reports where i
 
 ## Bass shakers and effects
 
-Give a ButtKicker or any other tactile transducer the role **Bass shaker** (Speaker tab, or
+Give a ButtKicker or any other tactile transducer the role **Bass shaker** (Speaker panel, or
 right click it on the map). It is limited to 10 to 80 Hz, plays no part in the speaker mode,
 and keeps its role when you change modes. Picking a ButtKicker or Dayton model on the Output
 tab does this for you.
 
-The **Effects** tab sets what the shakers feel: the game's bass (with its own level), the
+The **Effects** panel sets what the shakers feel: the game's bass (with its own level), the
 effects sent to them, or both.
 
 ### Sending effects and other sounds to chosen speakers
@@ -275,7 +375,7 @@ arrives separately:
 * **A spotter, voice chat or music app.** In Windows, open **Settings > Sound > Volume
   mixer** and set that app's output to a virtual device.
 
-On the **Effects** tab press **Add a source**, choose the device it plays into, and send each
+On the **Effects** panel press **Add a source**, choose the device it plays into, and send each
 of its channels to any speakers and shakers, with its own name and level. **Give it 8
 channels** sets a virtual device to 7.1, so ShakeIt can use eight separate channels. All of
 it plays on top of the game sound, so a speaker can play the game, the spotter and the tyres
@@ -285,11 +385,11 @@ at the same time.
 
 SpeakerWeave comes with a plugin for SimHub (https://www.simhubdash.com):
 
-1. Open the **Effects** tab and press **Install the SimHub plugin**. Close SimHub first, and
+1. Open the **Effects** panel and press **Install the SimHub plugin**. Close SimHub first, and
    say yes when Windows asks to allow the change (SimHub lives in Program Files).
 2. Start SimHub and say yes when it asks to enable the SpeakerWeave plugin.
 
-The Effects tab then shows **Connected**. Every game SimHub has seen gets a line under
+The Effects panel then shows **Connected**. Every game SimHub has seen gets a line under
 **Speaker setup for each game**: choose a saved setup for it, or set your speakers up for
 that game and press **Use current**. When SimHub sees the game start, SpeakerWeave loads
 that setup with its speakers, volumes and effects. **No game running** sets the setup for
@@ -310,7 +410,7 @@ Windows sees a TV or monitor as one sound output, whether the sound leaves throu
 speakers or through its headphone or aux jack. So:
 
 1. Tick the screen in the list like any other output.
-2. Click it on the map, open the **Output** tab and set **Where the sound comes out** to
+2. Click it on the map, open the **Output** panel and set **Where the sound comes out** to
    **Separate speakers plugged into its aux, headphone or line out**.
 3. The two speakers come loose from the screen on the map. Drag each one to where it stands.
 
@@ -319,7 +419,7 @@ sound output at all, and then there is nothing for the app to send sound to.
 
 ## Performance
 
-The **Performance** page shows how much of the PC SpeakerWeave uses: its share of the
+The **Performance** panel shows how much of the PC SpeakerWeave uses: its share of the
 processor and of the memory, how much of each block's time the sound work takes (above 70%
 the sound can start to break up), the delay SpeakerWeave adds, dropouts, and how busy the PC
 is as a whole. A chart shows the last two minutes (point at it to read a moment), and a list
@@ -327,7 +427,7 @@ shows how every output is keeping up.
 
 ## Fun
 
-The **Fun** page has sound effects for everything the PC plays:
+The **Fun** panel has sound effects for everything the PC plays:
 
 | Effect | What it does | The slider |
 | --- | --- | --- |
@@ -347,7 +447,7 @@ Press **Off** on a card to switch it on until you switch it off, or **Play for**
 on for the seconds next to it (pressing it again starts the time again). Several can play at
 once, and **Stop every effect** switches them all off. Each card can have a key for on or
 off and a key for its timed run, which work everywhere, also while a game is in front. The
-Controls page has the same actions for controller, wheel and button box buttons, and links
+Controls panel has the same actions for controller, wheel and button box buttons, and links
 for a Stream Deck. The **Fun** button shows how many effects are playing.
 
 The effects change the PC sound only: test sounds, sweeps and extra sources such as SimHub
@@ -392,7 +492,7 @@ one channel), which is the quickest way to hear what a single speaker adds.
 
 ### Your own test sounds
 
-On the **Settings** page, under **Your own test sounds**, choose up to five sound files: a
+On the **Settings** panel, under **Your own test sounds**, choose up to five sound files: a
 voice saying "left", a favourite piece of music, anything. WAV, MP3, M4A, WMA, FLAC and other
 files Windows can play are accepted. SpeakerWeave keeps its own copy (up to 30 seconds, quiet
 parts at the start and end trimmed), so the original file can be moved or deleted. Your
@@ -400,7 +500,7 @@ sounds then appear next to the noise and the sweep wherever you can play a test 
 
 ## Speaker types and the speaker library
 
-On the **Speaker** tab, **Speaker type** fills in a sensible frequency range for that kind
+On the **Speaker** panel, **Speaker type** fills in a sensible frequency range for that kind
 of speaker: subwoofers, bass shakers, floor standing, 8, 6.5, 5 and 3 inch monitors,
 soundbars, TV speakers, small desktop and portable speakers, tiny monitor speakers,
 midrange drivers and tweeters. They are starting points, fine tune them by ear.
@@ -408,13 +508,13 @@ midrange drivers and tweeters. They are starting points, fine tune them by ear.
 SpeakerWeave also recognises many outputs by the name Windows gives them (TVs, monitors,
 Logitech, Creative, Razer and SteelSeries speaker systems, headsets, AV receivers, soundbars
 and audio interfaces). When you tick one, its preset is filled in. Speakers on an ordinary
-audio jack cannot be seen by Windows, so pick their model on the **Output** tab under
+audio jack cannot be seen by Windows, so pick their model on the **Output** panel under
 **Speaker model** (Yamaha HS, KRK Rokit, JBL 3 Series, PreSonus Eris, Edifier, Audioengine,
 Kanto, Mackie, M-Audio, ButtKicker and more, or simply the woofer size).
 
 ## Controls
 
-The **Controls** page (top right) gives actions a key or a button:
+The **Controls** panel (File > Controls and hotkeys) gives actions a key or a button:
 
 * **Keys** work everywhere, also while a game is in front.
 * **Controller, wheel or button box** buttons and hat switches, read while a game is in front.
@@ -428,10 +528,11 @@ slots 1 to 4, and mute or unmute each output.
 
 ## Settings
 
-The **Settings** page has: start with Windows, start hidden in the system tray, start the
+The **Settings** panel has: start with Windows, start hidden in the system tray, start the
 sound as soon as SpeakerWeave opens (on from the start), keep running in the tray when the
 window is closed, watch for sound outputs
-being plugged in, fill in presets for recognised outputs, level meters on the map, colours,
+being plugged in, fill in presets for recognised outputs, level meters on the map, desks and
+sim rigs on the map, the look, the interface size, colours,
 your own test sounds, update checks and the About section.
 
 ### Making SpeakerWeave the Windows sound output
@@ -454,16 +555,27 @@ surround.
 
 ### Colours
 
-Under **Look**, pick one of six themes: Midnight (the default), Ember, Forest, Neon, Amber
-and Daylight (a light one). They were picked with the colour harmony rules of Adobe Color.
+Under **Look**, **Style** chooses how everything is drawn: **Studio** (the default: flat grey
+panels, thin lines and small text, like a video editor) or **Classic** (the first SpeakerWeave
+look, rounded and roomier). **Window > Look > Classic** brings back the first look in one go:
+the Classic style, the Midnight colours and the Classic workspace, and **Studio** returns.
+
+Pick one of seven colour themes: Studio (the default, neutral greys with blue), Midnight (the
+first SpeakerWeave colours), Ember, Forest, Neon, Amber and Daylight (a light one). They were
+picked with the colour harmony rules of Adobe Color.
 **Your own colours** lets you set the background, panels, lines, text and accent yourself.
 To use a theme from Adobe Color (color.adobe.com), copy its five colour codes and paste them
 in, or load a theme saved as an .ase file. SpeakerWeave arranges them so text stays readable,
 and you can change each colour afterwards.
 
+**Interface size** makes everything bigger or smaller, from 75% to 200% (100% is the regular
+size). SpeakerWeave follows the display scaling Windows uses on each screen by itself, and the
+size you pick goes on top of it. A new size needs SpeakerWeave to open again, which it offers
+to do straight away.
+
 ## Bluetooth
 
-**Bluetooth devices** under the output list shows what is paired with the PC and opens the
+**Bluetooth** under the output list (also **Sound > Bluetooth devices**) shows what is paired with the PC and opens the
 Windows Bluetooth settings for pairing and connecting. Connected Bluetooth speakers and
 headphones appear in the output list like any other output. Bluetooth adds a noticeable
 delay, so add Extra delay to the other outputs to line them up.
@@ -480,14 +592,14 @@ Giving a speaker the role **Subwoofer (LFE)** switches both limits on at 10 and 
 you. Change the numbers, or drag the two orange lines in the graph, to taste. The
 **Small speaker** button does the opposite and keeps deep bass away from a tiny speaker.
 
-On the **Sound** tab, **Send the bass of every channel to the subwoofer as well** makes the
+On the **Sound** panel, **Send the bass of every channel to the subwoofer as well** makes the
 subwoofer useful for stereo music too, not only for the dedicated bass channel of films
 and games.
 
 **Nothing below** hands a speaker's lowest notes to the subwoofer. While no subwoofer is
 playing, those notes would simply be lost and the sound turns thin, so the limit waits until
-there is one (the Speaker tab says so). **No subwoofer playing: every speaker keeps its lows**
-on the Sound tab switches this off.
+there is one (the Speaker panel says so). **No subwoofer playing: every speaker keeps its lows**
+on the Sound panel switches this off.
 
 ## Equaliser
 
@@ -499,10 +611,10 @@ below the graph. Double click empty space for a new band, double click a dot to 
 ## Timing
 
 Every speaker plays a little late, and each by a different amount: Bluetooth and TVs add
-their own lag, and sound takes about 3 ms to travel each metre. The tools under the map line
-them up so every speaker's sound reaches your seat together.
+their own lag, and sound takes about 3 ms to travel each metre. **Sync** under the map (also
+in the Sound menu) lines them up so every speaker's sound reaches your seat together.
 
-* **Easy sync > Two speakers at a time, by ear** walks you through it by ear. Two speakers at a time tick together. The click
+* **Sync > Easy sync: two speakers at a time, by ear** walks you through it by ear. Two speakers at a time tick together. The click
   seems to come from the speaker that plays first, so add delay to that one, a little at a
   time (steps of 5, 1 and 0.1 ms, and the same steps back with the − buttons), until you hear
   a single click from between the two. While its window is open the clicks play 6 dB louder,
@@ -515,7 +627,7 @@ them up so every speaker's sound reaches your seat together.
   the end, the speaker that needed the least delay is set to 0 ms and the same amount comes
   off all the others, so everything plays as early as possible. **Cancel** puts every delay
   back as it was.
-* **Easy sync > Tap along** measures each speaker instead. Its clicks play on one speaker at a
+* **Sync > Tap along** measures each speaker instead. Its clicks play on one speaker at a
   time, and a wide box shows the time around every click: 0 ms is the moment SpeakerWeave
   sends it, and a line runs across as each click comes up. Press **I hear it** (or Space)
   every time you hear the click, tapping along to the beat. Each press leaves a mark, and
@@ -527,13 +639,14 @@ them up so every speaker's sound reaches your seat together.
   are in time), one speaker after another round the room (the clicks should be perfectly
   even), or only the selected one. Change the tempo in its menu. The PC sound waits while
   it ticks.
-* **Line up delays** delays the nearer speakers, from the distances on the map, so all of
-  them reach your seat at the same moment. Good as a first step before Easy sync.
+* **Sync > Line up delays from the map** delays the nearer speakers, from the distances on the
+  map, so all of them reach your seat at the same moment. Good as a first step before Easy
+  sync.
 * TVs process sound for a while before playing it, and every model takes a different time.
   The app cannot measure that. If one screen is ahead of the others (you hear an echo or
-  a doubled sound), select it, open the **Output** tab and raise **Extra delay** until the
+  a doubled sound), select it, open the **Output** panel and raise **Extra delay** until the
   echo closes up. Game mode on the TV usually shortens its lag.
-* The **Safety buffer** on the Sound tab is extra delay the app adds on purpose. It starts at
+* The **Safety buffer** on the Sound panel is extra delay the app adds on purpose. It starts at
   0 ms, the least delay possible: SpeakerWeave then keeps only the room your sound cards
   need to play cleanly (about 20 to 25 ms for most), and adds a few milliseconds by itself if
   one runs dry. All outputs keep the same delay, so they stay in line. The status line at the
@@ -542,7 +655,7 @@ them up so every speaker's sound reaches your seat together.
 
 ### Keeping the delay as low as it goes
 
-For games, every millisecond counts. The **Delay** tile on the Performance page adds up what
+For games, every millisecond counts. The **Delay** tile on the Performance panel adds up what
 SpeakerWeave and Windows' buffers cost, and says where it comes from: **listening** (Windows
 handing over the PC sound), **buffer** (the room kept so no output runs dry), **output** (the
 slowest output's buffer) and **lining up speakers** (the most delay a speaker was given so
@@ -550,16 +663,16 @@ it reaches you together with the others). Each device adds its own lag inside on
 screens and TVs are slow: their speakers often take 20 to 80 ms, and because every speaker
 waits for the slowest one, that one sets the delay of the whole setup.
 
-* Tick **Lowest delay: use each output on its own** on the Sound tab. SpeakerWeave then plays
+* Tick **Lowest delay: use each output on its own** on the Sound panel. SpeakerWeave then plays
   straight to each output, past Windows' sound mixer and its buffer (WASAPI exclusive mode),
   which takes several milliseconds off every output. While the sound runs, other programs
   cannot play on those outputs. An output that does not allow it plays through Windows as
-  before, and the Errors page says which.
+  before, and the Errors panel says which.
 * Run the virtual device at **48 kHz**. At 96 or 192 kHz every sound is converted up and back
-  down again, which costs processor time and delay for no better sound. The Errors page offers
+  down again, which costs processor time and delay for no better sound. The Errors panel offers
   a button when it runs faster.
 * When every speaker has some delay in common (from Easy sync, Line up delays or Extra
-  delay), it only makes everything later. The Errors page offers to take it off, and Line up
+  delay), it only makes everything later. The Errors panel offers to take it off, and Line up
   delays leaves the latest speaker at 0 ms.
 * Put the TV or monitor in game mode, and prefer outputs with little lag of their own, such
   as a sound card or USB DAC with speakers, over the speakers in a screen.
@@ -575,7 +688,7 @@ motherboard headers, LED controllers and RGB peripherals.
 
 1. Open OpenRGB and check it can see and control your lights.
 2. In OpenRGB go to **SDK Server** and press **Start Server**.
-3. In SpeakerWeave open the **Lights** tab and press **Connect**.
+3. In SpeakerWeave open the **Lights** panel and press **Connect**.
 4. Select a speaker. In its **Lights** section pick the light (or the zone of a controller)
    that belongs to it, an effect and a colour.
 
@@ -597,22 +710,22 @@ VB-CABLE stays installed, as other apps may use it too.
 
 ## If something does not work
 
-Start with the **Errors** page: it names the problem and usually has a button that fixes it.
+Start with the **Errors** panel: it names the problem and usually has a button that fixes it.
 
 | What you see | What to try |
 | --- | --- |
-| An output is missing from the list | Press **Rescan**. Check that Windows lists it under sound outputs |
+| An output is missing from the list | Press **Rescan** under the list (or F5). Check that Windows lists it under sound outputs |
 | "not connected right now" after Start | That output is off or unplugged. Untick it or switch it on |
-| No sound at all | Open the **Errors** page and press the button on the first card |
-| No sound, status says waiting for sound | Nothing is playing into the device you listen to. The Errors page shows where Windows plays |
-| Only stereo arrives from a game | Press **Set it to 7.1** on the Errors page, then restart the game |
-| SimHub says nothing about SpeakerWeave | Install the plugin from the Effects tab, restart SimHub and enable it |
+| No sound at all | Open the **Errors** panel and press the button on the first card |
+| No sound, status says waiting for sound | Nothing is playing into the device you listen to. The Errors panel shows where Windows plays |
+| Only stereo arrives from a game | Press **Set it to 7.1** on the Errors panel, then restart the game |
+| SimHub says nothing about SpeakerWeave | Install the plugin from the Effects panel, restart SimHub and enable it |
 | Crackles or dropouts | Raise the Safety buffer. Close heavy programs |
 | Echo between two screens | Use Extra delay on the earlier one |
 | The list has no "Everything this PC plays on" entries | Run Install.bat again, the PyAudioWPatch library is missing |
 | A setup cannot be saved where you chose | Windows' Controlled folder access protects Documents and OneDrive. SpeakerWeave saves it in its own Setups folder instead and says where |
-| The sound is thin or tinny | A speaker's **Nothing below** cut is on with no subwoofer playing. Keep **No subwoofer playing: every speaker keeps its lows** ticked on the Sound tab |
-| Mute or solo sounds odd | Speakers on different outputs can be out of step. Use **Easy sync** under the map |
+| The sound is thin or tinny | A speaker's **Nothing below** cut is on with no subwoofer playing. Keep **No subwoofer playing: every speaker keeps its lows** ticked on the Sound panel |
+| Mute or solo sounds odd | Speakers on different outputs can be out of step. Use **Sync** under the map |
 
 ## What has been tested
 
@@ -634,17 +747,21 @@ were written without access to your hardware, so expect to report a rough edge o
 * `speakerweave/sounds.py` your own test sounds
 * `speakerweave/windefault.py` and `default_output.py` the Windows default sound output, and
   setting the virtual device to 7.1
-* `speakerweave/soundcheck.py` the checks behind the Errors page
+* `speakerweave/soundcheck.py` the checks behind the Errors panel
 * `speakerweave/cable.py` the name of the virtual device in Windows
 * `speakerweave/media.py` what is playing on the PC, and its play, pause and skip
 * `speakerweave/mics.py` microphone levels for the room map
-* `speakerweave/perf.py` processor and memory use for the Performance page
-* `speakerweave/fun.py` the sound effects of the Fun page
+* `speakerweave/perf.py` processor and memory use for the Performance panel
+* `speakerweave/fun.py` the sound effects of the Fun panel
+* `speakerweave/tones.py` the tone generator's tones, beeps, patterns and sweeps
+* `speakerweave/furniture.py` desks and sim rigs on the room map
 * `speakerweave/remote.py` the links for Stream Deck and the SimHub plugin
 * `speakerweave/simhub.py` finding SimHub and installing the plugin
 * `speakerweave/uninstall.py` removing SpeakerWeave from the PC
 * `speakerweave/release.py` publisher name and update address
 * `speakerweave/ui/` the window
+* `speakerweave/ui/workspace.py` panels and workspaces
+* `speakerweave/ui/levels_drawer.py` the level meters along the bottom, with their pin
 * `packaging/` the recipes that build SpeakerWeave.exe and its installer
 * `packaging/simhub/` the SimHub plugin (C#, built by `build_plugin.bat` with the compiler
   that comes with Windows)

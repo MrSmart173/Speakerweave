@@ -72,7 +72,7 @@ def test_the_tour_opens_once_and_spotlights_every_part():
         QTest.mouseClick(tour.next_btn, Qt.LeftButton)
     pump(app, 0.1)
     assert len(seen_titles) == len(tour.steps) >= 15
-    assert "Effects tab" in seen_titles and "Errors" in seen_titles
+    assert "Effects panel" in seen_titles and "Panels and workspaces" in seen_titles and "Errors" in seen_titles
     assert win._tour is None and state.settings.tour_done
     assert win.pages.currentIndex() == 0
 

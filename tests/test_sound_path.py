@@ -70,7 +70,8 @@ def test_settings_from_older_versions_start_the_sound_by_themselves():
     with open(path, "w") as fh:
         json.dump({"start_sound": False, "theme": "ember"}, fh)
     s = AppSettings.load(path)
-    assert s.start_sound and s.theme == "ember" and s.version == 2
+    from speakerweave.settings import SETTINGS_VERSION
+    assert s.start_sound and s.theme == "ember" and s.version == SETTINGS_VERSION
     s.start_sound = False
     s.save(path)
     assert AppSettings.load(path).start_sound is False      # a later choice is kept

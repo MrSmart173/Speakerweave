@@ -221,7 +221,7 @@ def test_every_preset_is_readable():
         assert theme.contrast(pal["DIM"], pal["PANEL"]) >= 4.0, key
         assert theme.contrast(pal["ON_ACCENT"], pal["ACCENT"]) >= 4.5, key
         assert theme.contrast(pal["ACCENT"], pal["PANEL"]) >= 3.0, key
-    assert len(theme.PRESETS) == 6
+    assert len(theme.PRESETS) == 7 and theme.DEFAULT_THEME == "studio"
     # the original look is kept exactly
     pal = theme.palette(theme.PRESETS["midnight"][2])
     assert pal["PANEL_2"] == "#232831" and pal["DIM"] == "#8d96a5" and pal["DEVICE"] == "#2a3040"
@@ -256,12 +256,12 @@ def test_colours_from_adobe_color():
 def test_saved_theme_choice_is_used():
     from speakerweave.settings import AppSettings
     s = AppSettings()
-    assert theme.colors_for(s) == theme.PRESETS["midnight"][2]
+    assert theme.colors_for(s) == theme.PRESETS["studio"][2]
     s.theme = "daylight"
     assert theme.colors_for(s)["bg"] == "#eef1f5"
     s.theme, s.custom_colors = "custom", {"accent": "#ff0000", "text": "not a colour"}
     c = theme.colors_for(s)
-    assert c["accent"] == "#ff0000" and c["text"] == theme.PRESETS["midnight"][2]["text"]
+    assert c["accent"] == "#ff0000" and c["text"] == theme.PRESETS["studio"][2]["text"]
 
 
 # ------------------------------------------------------------------ Windows default output
@@ -367,7 +367,12 @@ def test_settings_page_look_sounds_and_output(monkeypatch):
     win.grab()
     sp.theme_box.setCurrentIndex(0)
     sp._theme_chosen()
-    assert theme.BG == "#14171c"
+    assert theme.BG == "#161616" and state.settings.theme == "studio"
+    sp.theme_box.setCurrentIndex(sp.theme_box.findData("midnight"))
+    sp._theme_chosen()
+    assert theme.BG == "#14171c" and theme.PANEL_2 == "#232831"     # the first look, exactly
+    sp.theme_box.setCurrentIndex(0)
+    sp._theme_chosen()
     # the sound rows
     assert [row[0].text() for row in sp.sound_rows] == ["Empty"] * 5
     assert not sp.sound_rows[0][2].isEnabled()

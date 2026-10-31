@@ -6,9 +6,9 @@ import time
 
 from PySide6.QtCore import QPoint, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication, QIcon, QPixmap
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout,
-                               QFrame, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
-                               QScrollArea, QSlider, QSpinBox, QSplitter, QStackedWidget, QSystemTrayIcon, QTabWidget,
+from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QHBoxLayout,
+                               QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+                               QSlider, QSpinBox, QSystemTrayIcon,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QWidgetAction)
 
 from .. import backend, cable, paths, speaker_library, updates, windefault
@@ -37,6 +37,9 @@ from .tap_sync import start_tap_sync
 from .extras import ExtrasPanel
 from .found_again import ACTIVATE, IGNORE_ALWAYS, FoundAgainNote, ProblemsNote, UpdateNote
 from .levels import LevelsBar
+from .levels_drawer import LevelsDrawer
+from .tone_panel import TonePanel
+from .workspace import INSPECTOR, WorkspaceBar, Workspaces
 from .settings_page import SettingsPage, about_text
 from .fun_page import FunPage
 from .now_playing import NowPlaying, NowPlayingBar
@@ -45,6 +48,76 @@ from .state import own_setups_dir, remember_setup_folder, setups_dir
 from .updater import UpdateController
 
 ROLE_KEY = Qt.UserRole
+
+# what show_page(n) brings forward (these were pages of the window before panels)
+PAGE_PANELS = ("room", "controls", "settings", "errors", "performance", "fun")
+
+
+class InspectorTabs:
+    """Speaker, Output, Sound, Lights and Effects were tabs of one box. They are panels now;
+    this answers what the rest of SpeakerWeave asked that box."""
+
+    def __init__(self, window):
+        self.window = window
+        self._recent: list = []             # inspector panels, the last brought forward first
+
+    def _widgets(self) -> dict:
+        w = self.window
+        return {"speaker": w.speaker_panel, "output": w.device_panel, "sound": w.sound_panel,
+                "lights": w.lights_panel, "effects": w.extras_panel}
+
+    def shown(self, key: str) -> None:
+        if key in INSPECTOR:
+            self._recent = [key] + [k for k in self._recent if k != key]
+
+    def setCurrentWidget(self, widget) -> None:
+        for key, page in self._widgets().items():
+            if page is widget:
+                self.window.workspaces.open(key)
+                self.shown(key)
+                return
+
+    def currentWidget(self):
+        ws = self.window.workspaces
+        front = [key for key in INSPECTOR if ws.in_front(key)]
+        if not front:
+            return None
+        key = next((k for k in self._recent if k in front), front[0])
+        return self._widgets()[key]
+
+    def count(self) -> int:
+        return len(INSPECTOR)
+
+    def widget(self, index: int):
+        return self._widgets()[INSPECTOR[index]] if 0 <= index < len(INSPECTOR) else None
+
+    def indexOf(self, widget) -> int:
+        return next((i for i, k in enumerate(INSPECTOR) if self._widgets()[k] is widget), -1)
+
+
+class PageShim:
+    """The window used to show one page at a time. currentIndex is now the page panel last
+    brought forward (see PAGE_PANELS)."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def currentIndex(self) -> int:
+        return self.window._page
+
+    def setCurrentIndex(self, index: int) -> None:
+        self.window.show_page(index)
+
+    def count(self) -> int:
+        return len(PAGE_PANELS)
+
+    def widget(self, index: int):
+        if not 0 <= index < len(PAGE_PANELS):
+            return None
+        return self.window.workspaces.panel(PAGE_PANELS[index]).content
+
+    def currentWidget(self):
+        return self.widget(self.window._page)
 
 
 def chip(color: str) -> QIcon:
@@ -81,67 +154,73 @@ class MainWindow(QMainWindow):
         self.simhub = SimHubLink(self, state)
         self.remote.on_game = self.simhub.reported.emit
 
+        # The window is a top bar, then panels that can be moved, tabbed, undocked and closed
+        # (see workspace.py), then the level meters along the bottom.
         central = QWidget()
-        # in a window smaller than everything needs, scroll bars appear instead of things
-        # being squashed or cut off
-        self.scroller = QScrollArea()
-        self.scroller.setWidgetResizable(True)
-        self.scroller.setFrameShape(QFrame.NoFrame)
-        self.scroller.setWidget(central)
-        self.setCentralWidget(self.scroller)
+        central.setObjectName("central")
+        self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        root.setContentsMargins(10, 10, 10, 6)
-        root.setSpacing(8)
-        root.addLayout(self._build_top())
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self.dock_host = QMainWindow()
+        self.dock_host.setObjectName("dockHost")
+        self.dock_host.setWindowFlags(Qt.Widget)
+        self.dock_host.setContentsMargins(4, 4, 4, 4)
+        self.workspaces = Workspaces(self.dock_host, os.path.join(
+            os.path.dirname(state.settings_path), "workspaces.json"))
+        root.addWidget(self._build_top())
         self.banner = QLabel("")
         self.banner.setObjectName("banner")
         self.banner.setWordWrap(True)
         self.banner.hide()
-        root.addWidget(self.banner)
+        banner_row = QHBoxLayout()
+        banner_row.setContentsMargins(8, 4, 8, 0)
+        banner_row.addWidget(self.banner)
+        root.addLayout(banner_row)
+        root.addWidget(self.dock_host, 1)
 
-        split = QSplitter(Qt.Horizontal)
-        split.addWidget(self._build_left())
-        split.addWidget(self._build_centre())
-        self.tabs = QTabWidget()
+        outputs_box = self._build_left()
+        room_box = self._build_centre()
         self.speaker_panel = SpeakerPanel(state)
         self.device_panel = DevicePanel(state)
         self.sound_panel = SoundPanel(state)
         self.lights_panel = LightsPanel(state)
-        self.tabs.addTab(self.speaker_panel, "Speaker")
-        self.tabs.addTab(self.device_panel, "Output")
-        self.tabs.addTab(self.sound_panel, "Sound")
-        self.tabs.addTab(self.lights_panel, "Lights")
         self.extras_panel = ExtrasPanel(state, self.simhub)
-        self.tabs.addTab(self.extras_panel, "Effects")
-        self.tabs.setTabToolTip(4, "SimHub, bass shakers, and extra sounds such as SimHub effects")
-        self.tabs.setMinimumWidth(430)
-        split.addWidget(self.tabs)
-        split.setStretchFactor(0, 0)
-        split.setStretchFactor(1, 1)
-        split.setStretchFactor(2, 0)
-        split.setSizes([280, 720, 500])
         self.controls_page = ControlsPage(state, self)
         self.settings_page = SettingsPage(state, self)
         self.errors_page = ErrorsPage(state, self)
         self.performance_page = PerformancePage(state, self)
         self.fun_page = FunPage(state, self)
-        room_page = QWidget()
-        room = QVBoxLayout(room_page)
-        room.setContentsMargins(0, 0, 0, 0)
-        room.setSpacing(6)
-        room.addWidget(split, 1)
         self.now_bar = NowPlayingBar()
-        room.addWidget(self.now_bar)
+        self.tone_panel = TonePanel(state)
+        ws = self.workspaces
+        ws.add("outputs", outputs_box, scroll=True)
+        ws.add("room", room_box, scroll=True)
+        ws.add("now", self._build_now(), scroll=True)
+        ws.add("speaker", self.speaker_panel)
+        ws.add("output", self.device_panel)
+        ws.add("sound", self.sound_panel)
+        ws.add("lights", self.lights_panel)
+        ws.add("effects", self.extras_panel)
+        ws.add("tones", self.tone_panel, scroll=True)
+        ws.add("fun", self.fun_page)
+        ws.add("errors", self.errors_page)
+        ws.add("controls", self.controls_page)
+        ws.add("settings", self.settings_page)
+        ws.add("performance", self.performance_page)
+        self.tabs = InspectorTabs(self)
+        self.pages = PageShim(self)
+        self._page = 0
+        ws.panelShown.connect(self._panel_shown)
+        ws.refreshed.connect(self._sync_page_buttons)
+        ws.start()
+
         self.levels = LevelsBar(state)
-        self.levels.setVisible(state.settings.show_levels)
-        room.addWidget(self.levels)
-        self.pages = QStackedWidget()
-        self.pages.addWidget(room_page)
-        self.pages.addWidget(self.controls_page)
-        self.pages.addWidget(self.settings_page)
-        self.pages.addWidget(self.errors_page)
-        self.pages.addWidget(self.performance_page)
-        self.pages.addWidget(self.fun_page)
+        self.levels_drawer = LevelsDrawer(self.levels, central, state.settings.levels_pinned)
+        self.levels_drawer.pinChanged.connect(self._levels_pinned)
+        self.levels_drawer.setVisible(state.settings.show_levels)
+        root.addWidget(self.levels_drawer)
+        self._build_menus()
         self._badge = (0, 0, 0)                 # errors, warnings, notices on the Errors button
         self._badge_lit = False                 # the red half of a flash
         self._warn_lit = False                  # the yellow moment of a new warning
@@ -154,7 +233,6 @@ class MainWindow(QMainWindow):
         self._warn_timer.timeout.connect(self._warning_light_off)
         self._problems_note = None
         self.errors_page.countChanged.connect(self._errors_counted)
-        root.addWidget(self.pages, 1)
         self.run_label = QLabel("Stopped")
         self.run_label.setObjectName("dim")
         self.statusBar().addPermanentWidget(self.run_label)
@@ -172,6 +250,8 @@ class MainWindow(QMainWindow):
         state.funChanged.connect(self._fun_changed)
         state.structureChanged.connect(state.refresh_metronome)
         state.selectionChanged.connect(state.refresh_metronome)
+        state.structureChanged.connect(state.refresh_tone)
+        state.selectionChanged.connect(state.refresh_tone)
         self.updater = UpdateController(self, state)
         self.updater.available.connect(self.errors_page.refresh_soon)
         self._update_timer = QTimer(self)
@@ -221,15 +301,21 @@ class MainWindow(QMainWindow):
             self.move(room.center().x() - self.width() // 2, room.center().y() - self.height() // 2)
 
     # ------------------------------------------------------------ building
-    def _build_top(self):
-        # everything here can shrink, so the window also fits a small or zoomed laptop screen
-        row = QHBoxLayout()
-        row.setSpacing(4)
+    def _build_top(self) -> QWidget:
+        """Start, what plays where, the volume, the workspaces, and Fun and Errors. Everything
+        here can shrink, so the window also fits a small or zoomed laptop screen."""
+        bar = QWidget()
+        bar.setObjectName("topBar")
+        bar.setAttribute(Qt.WA_StyledBackground, True)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(8, 6, 8, 4)
+        row.setSpacing(6)
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("primary")
         self.start_btn.setCheckable(True)
-        self.start_btn.setMinimumWidth(84)
+        self.start_btn.setMinimumWidth(72)
         row.addWidget(self.start_btn)
+        row.addSpacing(6)
 
         row.addWidget(tag("Mode"))
         self.mode = QComboBox()
@@ -240,96 +326,177 @@ class MainWindow(QMainWindow):
         # the box stays compact, the open list is wide enough for the longest entry
         self.mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.mode.setMinimumContentsLength(9)
-        self.mode.setMaximumWidth(360)
+        self.mode.setMaximumWidth(300)
         self.mode.view().setMinimumWidth(self.mode.view().sizeHintForColumn(0) + 40)
         self.mode.setToolTip("Which speaker positions your room has. 4.0, 4.1, 5.0 and 5.1 come with "
                              "the surround pair beside you (side) or behind you (rear). Custom lets "
                              "you tick any combination.")
         row.addWidget(self.mode, 2)
-        self.positions_btn = QPushButton("Positions")
-        self.positions_btn.setToolTip("Tick any combination of speaker positions and subwoofers")
-        row.addWidget(self.positions_btn)
 
         row.addWidget(tag("Listen to"))
         self.input = QComboBox()
         self.input.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.input.setMinimumContentsLength(9)
+        self.input.setMaximumWidth(340)
         self.input.setToolTip("The one sound source that is spread over all your speakers")
-        row.addWidget(self.input, 4)
-        self.rescan = QPushButton("Rescan")
-        self.rescan.setToolTip("Look for sound devices again after plugging something in")
-        row.addWidget(self.rescan)
+        row.addWidget(self.input, 3)
 
+        row.addWidget(tag("Volume"))
         self.master = QSlider(Qt.Horizontal)
         self.master.setToolTip("Volume of all speakers together")
         self.master.setRange(-60, 12)
         self.master.setMinimumWidth(64)
-        self.master.setMaximumWidth(150)
+        self.master.setMaximumWidth(140)
         row.addWidget(self.master, 1)
         self.master_text = QLabel("")
         self.master_text.setFixedWidth(50)
         row.addWidget(self.master_text)
 
-        self.setup_btn = QPushButton("Setup")
-        menu = QMenu(self.setup_btn)
-        menu.addAction("New empty setup", self._new_setup)
-        menu.addAction("Open a saved setup...", self._open_setup)
-        menu.addAction("Save this setup as...", self._save_setup)
-        menu.addSeparator()
-        menu.addAction("Open the guide", self._open_guide)
-        menu.addAction("Take the tour", self.start_tour)
-        menu.addAction("Check for updates", lambda: self.updater.check(manual=True))
-        menu.addAction("About SpeakerWeave", self._about)
-        self.setup_btn.setMenu(menu)
-        row.addWidget(self.setup_btn)
+        row.addStretch(1)
+        self.workspace_bar = WorkspaceBar(self.workspaces)
+        row.addWidget(self.workspace_bar)
+        row.addStretch(1)
 
-        row.addSpacing(6)
-        self.nav = QButtonGroup(self)
-        self.nav.setExclusive(True)
-        # page numbers: 0 room, 1 controls, 2 settings, 3 errors, 4 performance, 5 fun
-        for index, text in ((0, "Room"), (5, "Fun"), (3, "Errors"), (1, "Controls"), (2, "Settings"),
-                            (4, "Performance")):
-            button = QPushButton(text)
-            button.setObjectName("nav")
-            button.setCheckable(True)
-            button.setChecked(index == 0)
-            self.nav.addButton(button, index)
-            row.addWidget(button)
-        self.errors_btn = self.nav.button(3)
-        self.fun_btn = self.nav.button(5)
+        self.fun_btn = QPushButton("Fun")
+        self.fun_btn.setObjectName("nav")
+        self.fun_btn.setCheckable(True)
         self.fun_btn.setToolTip("Sound effects for fun: bass boost, chipmunk voice, robot, echo, "
                                 "spinning round the room and more")
-        self.nav.button(4).setToolTip("How much processor and memory SpeakerWeave uses, and how "
-                                      "well the sound keeps up")
+        self.errors_btn = QPushButton("Errors")
+        self.errors_btn.setObjectName("nav")
+        self.errors_btn.setCheckable(True)
         self.errors_btn.setToolTip("Anything that keeps the sound from reaching your speakers, and "
                                    "anything wrong with the surround setup")
-        self.nav.idClicked.connect(self.show_page)
+        row.addWidget(self.fun_btn)
+        row.addWidget(self.errors_btn)
+        self.fun_btn.clicked.connect(lambda: self.show_page(5))
+        self.errors_btn.clicked.connect(lambda: self.show_page(3))
 
         self.start_btn.clicked.connect(self._toggle_running)
         self.mode.activated.connect(self._mode_changed)
-        self.positions_btn.clicked.connect(self._open_positions)
         self.input.activated.connect(self._input_changed)
-        self.rescan.clicked.connect(self.state.scan_devices)
         self.master.valueChanged.connect(self._master_changed)
-        return row
+        return bar
+
+    def _build_menus(self) -> None:
+        bar = self.menuBar()
+        file = bar.addMenu("&File")
+        file.addAction("New empty setup", self._new_setup, "Ctrl+N")
+        file.addAction("Open a saved setup...", self._open_setup, "Ctrl+O")
+        file.addAction("Save this setup as...", self._save_setup, "Ctrl+Shift+S")
+        file.addSeparator()
+        file.addAction("Settings", lambda: self.show_page(2), "Ctrl+,")
+        file.addAction("Controls and hotkeys", lambda: self.show_page(1))
+        file.addSeparator()
+        file.addAction("Quit SpeakerWeave", self.quit_app, "Ctrl+Q")
+
+        sound = bar.addMenu("&Sound")
+        self.start_action = sound.addAction("Start the sound", self._toggle_running)
+        sound.addAction("Look for sound devices again", self.state.scan_devices, "F5")
+        sound.addAction("Speaker positions...", self._open_positions)
+        sound.addAction("Bluetooth devices...", lambda: BluetoothDialog(self).exec())
+        sound.addSeparator()
+        sync = sound.addMenu("Easy sync")
+        sync.addAction("Two speakers at a time, by ear", lambda: start_easy_sync(self))
+        sync.addAction("Tap along: measure each speaker", lambda: start_tap_sync(self))
+        sound.addAction("Line up delays from the map", self._auto_align)
+        sound.addAction("Set roles from the map", self._auto_assign)
+        sound.addSeparator()
+        test = sound.addMenu("Test sound")
+        test.aboutToShow.connect(lambda: (test.clear(), self._fill_play_menu(test)))
+        sound.addMenu(self.metronome_menu).setText("Metronome")
+        sound.addAction("Tone generator", lambda: self.workspaces.open("tones"))
+        sound.aboutToShow.connect(lambda: self.start_action.setText(
+            "Stop the sound" if self.state.runner.running else "Start the sound"))
+
+        window = bar.addMenu("&Window")
+        self.workspace_menu = window.addMenu("Workspaces")
+        self.workspace_menu.aboutToShow.connect(
+            lambda: self.workspaces.fill_workspace_menu(self.workspace_menu, self))
+        window.addAction("Reset to saved layout", self.workspaces.reset)
+        window.addAction("Save as new workspace...", lambda: self.workspaces.ask_save_as(self))
+        window.addSeparator()
+        self.panels_menu = window.addMenu("Panels")
+        self.panels_menu.aboutToShow.connect(
+            lambda: (self.panels_menu.clear(), self.workspaces.fill_panel_menu(self.panels_menu)))
+        self.levels_action = window.addAction("Levels")
+        self.levels_action.setCheckable(True)
+        self.levels_action.setChecked(self.state.settings.show_levels)
+        self.levels_action.toggled.connect(self._levels_toggled)
+        self.pin_action = window.addAction("Pin the levels")
+        self.pin_action.setCheckable(True)
+        self.pin_action.setChecked(self.state.settings.levels_pinned)
+        self.pin_action.toggled.connect(lambda on: self.levels_drawer.set_pinned(on))
+        window.addSeparator()
+        self.max_action = window.addAction("Maximise panel", lambda: self.workspaces.toggle_maximised(),
+                                           "`")
+        self.max_action.setShortcutContext(Qt.WindowShortcut)
+        window.addSeparator()
+        look = window.addMenu("Look")
+        look.aboutToShow.connect(lambda: self._fill_look_menu(look))
+
+        help_menu = bar.addMenu("&Help")
+        help_menu.addAction("SpeakerWeave guide", self._open_guide, "F1")
+        help_menu.addAction("Take the tour", self.start_tour)
+        help_menu.addAction("Check for updates", lambda: self.updater.check(manual=True))
+        help_menu.addSeparator()
+        help_menu.addAction("About SpeakerWeave", self._about)
+        # right clicking the menu bar or a panel edge offers no list of its own
+        self.setContextMenuPolicy(Qt.NoContextMenu)
+        self.dock_host.setContextMenuPolicy(Qt.NoContextMenu)
+
+    def _fill_look_menu(self, menu: QMenu) -> None:
+        menu.clear()
+        s = self.state.settings
+        for key, name, tip in (("studio", "Studio", "Flat grey panels and blue, like a video editor"),
+                               ("classic", "Classic", "The first SpeakerWeave look: rounded, roomier, "
+                                                      "Midnight colours and the Classic workspace")):
+            action = menu.addAction(name, lambda k=key: self.use_look(k))
+            action.setCheckable(True)
+            action.setChecked(theme.look_for(s) == key)
+            action.setToolTip(tip)
+        menu.addSeparator()
+        menu.addAction("Colours and interface size...", lambda: self.show_page(2))
+
+    def use_look(self, look: str) -> None:
+        """Studio or Classic, in one go: the drawing style, its colours and its workspace."""
+        s = self.state.settings
+        if look not in theme.LOOKS:
+            return
+        s.look = look
+        if look == "classic" and s.theme == theme.DEFAULT_THEME:
+            s.theme = theme.CLASSIC_THEME
+        elif look == "studio" and s.theme == theme.CLASSIC_THEME:
+            s.theme = theme.DEFAULT_THEME
+        self.state.save_settings()
+        theme.apply(QApplication.instance(), theme.colors_for(s), look)
+        self.theme_changed()
+        self.workspaces.switch("Classic" if look == "classic" else "Setup")
+        self.settings_page.load_look()
 
     def _build_left(self):
         box = QWidget()
         col = QVBoxLayout(box)
         col.setContentsMargins(0, 0, 0, 0)
-        title = QLabel("Sound outputs")
-        title.setObjectName("title")
-        col.addWidget(title)
+        col.setSpacing(6)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
-        self.tree.setMinimumWidth(190)
+        self.tree.setMinimumWidth(150)
         col.addWidget(self.tree, 1)
         col.addWidget(dim("Tick an output to use it. Click a speaker to change its role and sound."))
-        self.bluetooth_btn = QPushButton("Bluetooth devices")
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.rescan = QPushButton("Rescan")
+        self.rescan.setToolTip("Look for sound devices again after plugging something in (F5)")
+        self.bluetooth_btn = QPushButton("Bluetooth")
         self.bluetooth_btn.setToolTip("See the Bluetooth devices paired with this PC, or open the "
                                       "Windows Bluetooth settings")
-        col.addWidget(self.bluetooth_btn)
+        row.addWidget(self.rescan)
+        row.addWidget(self.bluetooth_btn)
+        row.addStretch(1)
+        col.addLayout(row)
+        self.rescan.clicked.connect(self.state.scan_devices)
         self.bluetooth_btn.clicked.connect(lambda: BluetoothDialog(self).exec())
         self.tree.itemChanged.connect(self._tree_item_changed)
         self.tree.itemClicked.connect(self._tree_clicked)
@@ -339,29 +506,51 @@ class MainWindow(QMainWindow):
         self.tree.itemCollapsed.connect(lambda item: self._folder_toggled(item, False))
         return box
 
+    def _build_now(self):
+        box = QWidget()
+        col = QVBoxLayout(box)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.addWidget(self.now_bar)
+        self.now_empty = QLabel("Nothing is playing on the PC")
+        self.now_empty.setObjectName("emptyNote")
+        col.addWidget(self.now_empty)
+        col.addStretch(1)
+        self.now_bar.installEventFilter(self)
+        return box
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is getattr(self, "now_bar", None) and event.type() in (event.Type.Show, event.Type.Hide):
+            self.now_empty.setVisible(self.now_bar.isHidden())
+        return super().eventFilter(obj, event)
+
     def _build_centre(self):
         box = QWidget()
         col = QVBoxLayout(box)
         col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(6)
         self.map = RoomMap(self.state)
         col.addWidget(self.map, 1)
         row = QHBoxLayout()
+        row.setSpacing(4)
         self.assign_btn = QPushButton("Set roles")
         self.assign_btn.setToolTip("Gives every speaker the role that matches where it sits "
                                    "around you on the map")
-        self.align_btn = QPushButton("Line up delays")
-        self.align_btn.setToolTip("Works out the distances on the map and delays the nearer speakers, "
-                                  "so the sound of all of them reaches you together")
         self.mirror_btn = QPushButton("Mirror")
         self.mirror_btn.setCheckable(True)
         self.mirror_btn.setToolTip("On: when you move one speaker, its partner on the other side "
                                    "moves the opposite way sideways and the same way front to back")
-        self.sync_btn = QPushButton("Easy sync")
+        self.sync_btn = QPushButton("Sync")
         self.sync_btn.setToolTip("Line up the timing of your speakers so every speaker's sound reaches "
-                                 "you together: by ear, two at a time, or by tapping along to each one")
+                                 "you together: by ear two at a time, by tapping along to each one, or "
+                                 "from the distances on the map")
         sync_menu = QMenu(self.sync_btn)
-        sync_menu.addAction("Two speakers at a time, by ear", lambda: start_easy_sync(self))
+        sync_menu.addAction("Easy sync: two speakers at a time, by ear", lambda: start_easy_sync(self))
         sync_menu.addAction("Tap along: measure each speaker", lambda: start_tap_sync(self))
+        sync_menu.addSeparator()
+        self.align_action = sync_menu.addAction("Line up delays from the map", self._auto_align)
+        self.align_action.setToolTip("Works out the distances on the map and delays the nearer "
+                                     "speakers, so the sound of all of them reaches you together")
+        sync_menu.setToolTipsVisible(True)
         self.sync_btn.setMenu(sync_menu)
         self.play_btn = QPushButton("Test sound")
         self.play_btn.setToolTip("Plays a sound on the selected speaker only (you can also right click "
@@ -379,23 +568,18 @@ class MainWindow(QMainWindow):
         self.metronome_menu = QMenu(self.metronome_btn)
         self.metronome_menu.aboutToShow.connect(self._fill_metronome_menu)
         self.metronome_btn.setMenu(self.metronome_menu)
-        self.levels_btn = QPushButton("Levels")
-        self.levels_btn.setCheckable(True)
-        self.levels_btn.setChecked(self.state.settings.show_levels)
-        self.levels_btn.setToolTip("Show or hide the level meters of the PC sound and every output")
         # the buttons and the lines under them sit centred under the room map. A little
         # less padding than other buttons keeps the row narrow enough for laptop screens.
-        for button in (self.assign_btn, self.sync_btn, self.align_btn, self.mirror_btn, self.play_btn,
-                       self.metronome_btn, self.levels_btn):
+        for button in (self.assign_btn, self.sync_btn, self.mirror_btn, self.play_btn,
+                       self.metronome_btn):
             button.setObjectName("mapRow")
         row.addStretch(1)
-        row.addWidget(self.assign_btn)
-        row.addWidget(self.sync_btn)
-        row.addWidget(self.align_btn)
-        row.addWidget(self.mirror_btn)
         row.addWidget(self.play_btn)
         row.addWidget(self.metronome_btn)
-        row.addWidget(self.levels_btn)
+        row.addWidget(self.sync_btn)
+        row.addSpacing(8)
+        row.addWidget(self.assign_btn)
+        row.addWidget(self.mirror_btn)
         row.addStretch(1)
         col.addLayout(row)
         self.test_text = dim("")
@@ -404,11 +588,11 @@ class MainWindow(QMainWindow):
         col.addWidget(self.test_text)
         self.coverage = dim("")
         self.coverage.setAlignment(Qt.AlignCenter)
+        self.coverage.setWordWrap(True)
+        self.coverage.hide()
         col.addWidget(self.coverage)
         self.assign_btn.clicked.connect(self._auto_assign)
-        self.align_btn.clicked.connect(self._auto_align)
         self.mirror_btn.toggled.connect(self._mirror_toggled)
-        self.levels_btn.toggled.connect(self._levels_toggled)
         return box
 
     # ------------------------------------------------------------ test sounds and sweeps
@@ -504,9 +688,18 @@ class MainWindow(QMainWindow):
                 "change its Delay on the Speaker tab.")
 
     def _levels_toggled(self, on: bool) -> None:
-        self.levels.setVisible(on)
+        self.levels_drawer.setVisible(on)
+        if self.levels_action.isChecked() != on:
+            self.levels_action.setChecked(on)
         if self.state.settings.show_levels != on:
             self.state.settings.show_levels = on
+            self.state.save_settings()
+
+    def _levels_pinned(self, on: bool) -> None:
+        if self.pin_action.isChecked() != on:
+            self.pin_action.setChecked(on)
+        if self.state.settings.levels_pinned != on:
+            self.state.settings.levels_pinned = on
             self.state.save_settings()
 
     # ------------------------------------------------------------ startup
@@ -591,7 +784,12 @@ class MainWindow(QMainWindow):
         self.fun_btn.setText(f"Fun ({count})" if count else "Fun")
 
     def show_page(self, index: int) -> None:
-        self.pages.setCurrentIndex(index)
+        """Brings a panel to the front: 0 the room, 1 Controls, 2 Settings, 3 Errors,
+        4 Performance, 5 Fun. A closed one opens where it was, or beside the room."""
+        if not 0 <= index < len(PAGE_PANELS):
+            return
+        self.workspaces.open(PAGE_PANELS[index])
+        self._page = index
         note = getattr(self, "_update_note", None)
         if index == 3 and note is not None:         # the notice is right there now
             note.hide()
@@ -602,9 +800,20 @@ class MainWindow(QMainWindow):
             problems.hide()
             problems.deleteLater()
             self._problems_note = None
-        button = self.nav.button(index)
-        if button is not None and not button.isChecked():
-            button.setChecked(True)
+        self._sync_page_buttons()
+
+    def _panel_shown(self, key: str) -> None:
+        """A panel came to the front, by a click on its tab, say."""
+        if key in PAGE_PANELS:
+            self._page = PAGE_PANELS.index(key)
+        self.tabs.shown(key)
+
+    def _sync_page_buttons(self) -> None:
+        ws = self.workspaces
+        for button, key in ((self.fun_btn, "fun"), (self.errors_btn, "errors")):
+            on = ws.in_front(key)
+            if button.isChecked() != on:
+                button.setChecked(on)
         self._paint_badge()                         # no red flashing on the Errors page itself
 
     def _build_tray(self) -> None:
@@ -648,6 +857,20 @@ class MainWindow(QMainWindow):
         self._quitting = True
         self.close()
         QApplication.quit()
+
+    def restart_app(self) -> None:
+        """Opens a fresh copy of SpeakerWeave and closes this one (a new interface size, say)."""
+        from PySide6.QtCore import QProcess
+        from ..app import restart_command
+        program, args = restart_command()
+        self.workspaces.remember()
+        self.state.save_now()
+        self.state.save_settings()
+        if QProcess.startDetached(program, args):
+            self.quit_app()
+        else:
+            QMessageBox.warning(self, "SpeakerWeave", "SpeakerWeave could not open again by itself. "
+                                "Close it and open it again to see the change.")
 
     def apply_hotkeys(self) -> list:
         return self.hotkeys.apply(key_bindings(self.state.settings.bindings))
@@ -861,7 +1084,7 @@ class MainWindow(QMainWindow):
         """Opening with something wrong: a summary under the Errors button."""
         self.errors_page.refresh()
         found = self.errors_page.last_found
-        if not found or self.pages.currentIndex() == 3:
+        if not found or self.workspaces.in_front("errors"):
             return
         if not self.isVisible() or self.isMinimized():
             self._problems_waiting = True       # shown when the window opens
@@ -1065,6 +1288,8 @@ class MainWindow(QMainWindow):
 
     def theme_changed(self) -> None:
         """A new colour theme was applied: redraw everything painted by hand."""
+        self.workspaces.restyle()
+        self.levels_drawer.restyle()
         self._rebuild_tree()
         self.map.update()
         self.performance_page.restyle()
@@ -1439,14 +1664,20 @@ class MainWindow(QMainWindow):
 
     def _selection_changed(self) -> None:
         self._highlight_selection()
-        # Speaker and Output follow what was clicked. Sound, Lights and Effects are not
-        # about one speaker, so whoever is working there stays there.
-        if self.tabs.currentWidget() not in (self.speaker_panel, self.device_panel):
-            return
+        # Speaker and Output follow what was clicked, when they share a tab group and one of
+        # them is in front. Sound, Lights and Effects are not about one speaker, so whoever
+        # is working there stays there.
         if self.state.sel_spk:
-            self.tabs.setCurrentWidget(self.speaker_panel)
+            self._follow("speaker", "output")
         elif self.state.sel_dev:
-            self.tabs.setCurrentWidget(self.device_panel)
+            self._follow("output", "speaker")
+
+    def _follow(self, want: str, other: str) -> None:
+        ws = self.workspaces
+        if ws.in_front(want) or not ws.is_open(want) or not ws.in_front(other):
+            return
+        if ws.panel(want) in self.dock_host.tabifiedDockWidgets(ws.panel(other)):
+            ws.open(want)
 
     # ------------------------------------------------------------ timers
     def _tick_meters(self) -> None:
@@ -1500,10 +1731,12 @@ class MainWindow(QMainWindow):
         missing = state.project.roles_missing() if state.project.devices else []
         if missing:
             names = ", ".join(ROLE_NAMES[r] for r in missing)
-            self.coverage.setText(f"No speaker set to: {names}. That sound is shared between "
-                                  f"the nearest speakers.")
+            text = f"No speaker set to: {names}. That sound is shared between the nearest speakers."
         else:
-            self.coverage.setText("")
+            text = ""
+        if self.coverage.text() != text:
+            self.coverage.setText(text)
+            self.coverage.setVisible(bool(text))
         if not state.runner.running:
             self.run_label.setText("Stopped")
             return
@@ -1542,6 +1775,7 @@ class MainWindow(QMainWindow):
                 s.tray_hint_shown = True
                 self.state.save_settings()
             return
+        self.workspaces.remember()
         self.hotkeys.clear()
         self.now_playing.stop()
         self.simhub.keep_changes()

@@ -8,8 +8,13 @@ from PySide6.QtWidgets import QAbstractSpinBox, QLineEdit
 # The colours in use right now. use() fills them in from the chosen theme.
 BG = PANEL = PANEL_2 = FIELD = BORDER = TEXT = DIM = ACCENT = ON_ACCENT = ""
 GOOD = WARN = BAD = DEVICE = DEVICE_EXT = DEVICE_EDGE = OFF_FILL = BADGE_EDGE = LABEL = ""
-BANNER_BG = BANNER_EDGE = STYLE = ""
+BANNER_BG = BANNER_EDGE = STYLE = HOVER = ACCENT_SOFT = ACCENT_TEXT = ""
 DARK = True
+# The style the widgets are drawn in: "studio" (flat and compact, like a video editor) or
+# "classic" (rounded, roomier: the look SpeakerWeave first had)
+LOOKS = {"studio": "Studio", "classic": "Classic"}
+DEFAULT_LOOK = "studio"
+LOOK = DEFAULT_LOOK
 
 # ------------------------------------------------------------------ colour themes
 #
@@ -25,7 +30,10 @@ THEME_LABELS = {"bg": "Background", "panel": "Panels", "line": "Lines and border
 CUSTOM = "custom"
 
 PRESETS = {
-    "midnight": ("Midnight", "Default",
+    "studio": ("Studio", "Default: neutral greys with blue, like a video editor",
+               {"bg": "#161616", "panel": "#232323", "line": "#383838", "text": "#e1e1e1",
+                "accent": "#1f74d6"}),
+    "midnight": ("Midnight", "The first SpeakerWeave colours",
                  {"bg": "#14171c", "panel": "#1b1f26", "line": "#2f3643", "text": "#e6e9ef",
                   "accent": "#4da3ff"}),
     "ember": ("Ember", "Complementary: deep teal with warm orange",
@@ -44,7 +52,8 @@ PRESETS = {
                  {"bg": "#eef1f5", "panel": "#ffffff", "line": "#d3d9e2", "text": "#1d2330",
                   "accent": "#2f6fdb"}),
 }
-DEFAULT_THEME = "midnight"
+DEFAULT_THEME = "studio"
+CLASSIC_THEME = "midnight"
 
 # the original look, kept exactly as it was
 _MIDNIGHT_EXACT = {
@@ -114,9 +123,12 @@ def palette(colors: dict) -> dict:
         "LABEL": mix(text, panel, 0.12),
         "BANNER_BG": mix(panel, warn, 0.14),
         "BANNER_EDGE": mix(panel, warn, 0.40),
+        "HOVER": mix(mix(panel, text, 0.05), text, 0.07),
+        "ACCENT_SOFT": mix(panel, accent, 0.35),
+        "ACCENT_TEXT": mix(accent, text, 0.35) if dark else accent,
         "DARK": dark,
     }
-    if c == PRESETS[DEFAULT_THEME][2]:
+    if c == PRESETS[CLASSIC_THEME][2]:
         pal.update(_MIDNIGHT_EXACT)
     return pal
 
@@ -127,6 +139,10 @@ def colors_for(settings) -> dict:
     if name == CUSTOM:
         return clean_colors(getattr(settings, "custom_colors", {}))
     return dict(PRESETS.get(name, PRESETS[DEFAULT_THEME])[2])
+
+
+def _current_colors() -> dict:
+    return {"bg": BG, "panel": PANEL, "line": BORDER, "text": TEXT, "accent": ACCENT}
 
 
 def readable(color: str, minimum: float = 3.2) -> str:
@@ -148,6 +164,10 @@ def faint(alpha: int) -> QColor:
 
 
 def _style() -> str:
+    return (_studio() if LOOK == "studio" else _classic()) + _docks()
+
+
+def _classic() -> str:
     return f"""
 QWidget {{ color: {TEXT}; font-size: 13px; }}
 QMainWindow, QDialog {{ background: {BG}; }}
@@ -211,11 +231,140 @@ QMenu {{ background: {PANEL_2}; border: 1px solid {BORDER}; padding: 4px; }}
 QMenu::item {{ padding: 5px 18px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {ACCENT}; color: {ON_ACCENT}; }}
 QMenu::item:disabled {{ color: {DIM}; }}
+QMenuBar {{ background: {BG}; padding: 2px 6px; }}
+QMenuBar::item {{ background: transparent; padding: 5px 10px; border-radius: 4px; }}
+QMenuBar::item:selected {{ background: {PANEL_2}; }}
+QLabel#panelTitle {{ font-size: 14px; font-weight: 700; padding: 6px 4px; }}
+QWidget#topBar {{ background: {BG}; }}
 """
 
 
-def use(colors: dict) -> None:
+def _studio() -> str:
+    """Flat and compact: grey panels in a darker frame, thin lines, small text, and the
+    accent only where something is chosen, as in a video editor."""
+    return f"""
+QWidget {{ color: {TEXT}; font-size: 12px; }}
+QMainWindow, QDialog {{ background: {BG}; }}
+QToolTip {{ background: {PANEL_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 4px 6px; }}
+QGroupBox {{ background: transparent; border: none; border-top: 1px solid {BORDER};
+             margin-top: 20px; padding: 10px 0px 2px 0px; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 0px; top: 3px; padding: 0px;
+                    color: {DIM}; font-weight: 600; }}
+QPushButton {{ background: {PANEL_2}; border: 1px solid {BORDER}; border-radius: 3px;
+               padding: 4px 10px; }}
+QPushButton:hover {{ background: {HOVER}; }}
+QPushButton:pressed {{ background: {FIELD}; }}
+QPushButton:disabled {{ color: {DIM}; background: {PANEL}; }}
+QPushButton:checked {{ background: {ACCENT_SOFT}; border-color: {ACCENT}; color: {TEXT}; }}
+QPushButton#primary {{ background: {ACCENT}; color: {ON_ACCENT}; border-color: {ACCENT};
+                       font-weight: 600; padding: 4px 14px; }}
+QPushButton#primary:hover {{ background: {mix(ACCENT, TEXT, 0.12)}; }}
+QPushButton#primary:checked {{ background: {BAD}; border-color: {BAD}; color: #ffffff; }}
+QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{ background: {FIELD}; border: 1px solid {BORDER};
+               border-radius: 3px; padding: 3px 6px; selection-background-color: {ACCENT};
+               selection-color: {ON_ACCENT}; }}
+QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ border-color: {DIM}; }}
+QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {ACCENT}; }}
+QComboBox::drop-down {{ border: none; width: 16px; }}
+QComboBox QAbstractItemView {{ background: {PANEL_2}; border: 1px solid {BORDER};
+               selection-background-color: {ACCENT}; selection-color: {ON_ACCENT}; }}
+QTabWidget::pane {{ border: none; border-top: 1px solid {BORDER}; background: transparent; top: -1px; }}
+QTabBar::tab {{ background: transparent; color: {DIM}; padding: 5px 10px; border: none;
+                border-bottom: 2px solid transparent; }}
+QTabBar::tab:hover {{ color: {TEXT}; }}
+QTabBar::tab:selected {{ color: {TEXT}; border-bottom: 2px solid {ACCENT}; }}
+QTreeWidget, QTableWidget, QListWidget {{ background: {FIELD}; border: 1px solid {BORDER};
+               border-radius: 2px; outline: none; }}
+QTreeWidget::item, QListWidget::item {{ padding: 3px 2px; }}
+QTreeWidget::item:hover {{ background: {PANEL_2}; }}
+QTreeWidget::item:selected, QListWidget::item:selected {{ background: {ACCENT_SOFT}; color: {TEXT}; }}
+QTreeWidget::indicator {{ width: 13px; height: 13px; border: 1px solid {DIM}; border-radius: 2px;
+                          background: {FIELD}; }}
+QTreeWidget::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
+QHeaderView::section {{ background: {PANEL}; color: {DIM}; border: none;
+                        border-bottom: 1px solid {BORDER}; padding: 4px; }}
+QScrollArea {{ border: none; background: transparent; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 0; }}
+QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 4px; min-height: 30px; }}
+QScrollBar::handle:horizontal {{ background: {BORDER}; border-radius: 4px; min-width: 30px; }}
+QScrollBar::handle:hover {{ background: {DIM}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+QSlider::groove:horizontal {{ height: 2px; background: {BORDER}; border-radius: 1px; }}
+QSlider::sub-page:horizontal {{ background: {ACCENT}; border-radius: 1px; }}
+QSlider::handle:horizontal {{ background: {TEXT}; width: 10px; height: 10px; margin: -4px 0;
+                              border-radius: 5px; }}
+QSlider::handle:horizontal:hover {{ background: #ffffff; }}
+QCheckBox::indicator, QRadioButton::indicator {{ width: 13px; height: 13px;
+                        border: 1px solid {DIM}; border-radius: 2px; background: {FIELD}; }}
+QRadioButton::indicator {{ border-radius: 7px; }}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{ background: {ACCENT};
+                        border-color: {ACCENT}; }}
+QLabel#dim {{ color: {DIM}; }}
+QLabel#banner {{ background: {BANNER_BG}; color: {WARN}; border: none;
+                 border-left: 3px solid {WARN}; padding: 6px 10px; }}
+QLabel#title {{ font-size: 14px; font-weight: 600; }}
+QLabel#subtitle {{ font-weight: 600; }}
+QLabel#warn {{ color: {WARN}; }}
+QPushButton#danger {{ color: {BAD}; border-color: {BAD}; }}
+QPushButton#danger:hover {{ background: {BAD}; color: #ffffff; }}
+QPushButton#mapRow {{ padding: 4px 9px; }}
+QStatusBar {{ background: {BG}; color: {DIM}; }}
+QStatusBar::item {{ border: none; }}
+QSplitter::handle {{ background: {BG}; width: 4px; }}
+QMenu {{ background: {PANEL_2}; border: 1px solid {BORDER}; padding: 4px 0px; }}
+QMenu::item {{ padding: 4px 24px 4px 22px; }}
+QMenu::item:selected {{ background: {ACCENT}; color: {ON_ACCENT}; }}
+QMenu::item:disabled {{ color: {DIM}; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 0px; }}
+QMenu::section {{ color: {DIM}; padding: 4px 12px; }}
+QMenuBar {{ background: {BG}; padding: 1px 4px; }}
+QMenuBar::item {{ background: transparent; color: {TEXT}; padding: 4px 9px; border-radius: 2px; }}
+QMenuBar::item:selected {{ background: {PANEL_2}; }}
+QLabel#panelTitle {{ padding: 5px 4px 4px 4px; }}
+QWidget#topBar {{ background: {BG}; }}
+"""
+
+
+def _docks() -> str:
+    """Panels, their tabs and the workspace bar, in either look."""
+    return f"""
+QMainWindow::separator {{ background: {BG}; width: 4px; height: 4px; }}
+QMainWindow::separator:hover {{ background: {ACCENT}; }}
+QFrame#panelBody {{ background: {PANEL}; border: none; }}
+QWidget#panelHeader {{ background: {PANEL}; }}
+QLabel#panelTitle {{ color: {TEXT}; border-bottom: 2px solid {ACCENT}; }}
+QToolButton#panelMenu {{ border: none; padding: 2px; margin-left: 2px; border-radius: 2px; }}
+QToolButton#panelMenu:hover {{ background: {PANEL_2}; }}
+QMainWindow > QTabBar, QDockWidgetGroupWindow > QTabBar {{ background: {PANEL};
+                qproperty-drawBase: 0; }}
+QMainWindow > QTabBar::tab, QDockWidgetGroupWindow > QTabBar::tab {{ background: {PANEL};
+                color: {DIM}; padding: 5px 6px 4px 8px; margin: 0px; border: none;
+                border-bottom: 2px solid transparent; }}
+QMainWindow > QTabBar::tab:hover {{ color: {TEXT}; }}
+QMainWindow > QTabBar::tab:selected, QDockWidgetGroupWindow > QTabBar::tab:selected {{
+                color: {TEXT}; border-bottom: 2px solid {ACCENT}; }}
+QToolButton#workspaceTab {{ color: {DIM}; background: transparent; border: none;
+                border-bottom: 2px solid transparent; padding: 5px 10px 4px 10px; }}
+QToolButton#workspaceTab:hover {{ color: {TEXT}; }}
+QToolButton#workspaceTab:checked {{ color: {ACCENT_TEXT}; border-bottom: 2px solid {ACCENT}; }}
+QToolButton#workspaceMore {{ color: {DIM}; border: none; padding: 4px 8px; }}
+QToolButton#workspaceMore::menu-indicator {{ image: none; width: 0px; }}
+QToolButton#workspaceMore:hover {{ color: {TEXT}; }}
+QFrame#levelsSheet {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
+QFrame#levelsStrip {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
+QToolButton#pin {{ border: none; padding: 2px; border-radius: 2px; }}
+QToolButton#pin:hover {{ background: {PANEL_2}; }}
+QLabel#emptyNote {{ color: {DIM}; }}
+QPushButton#quick {{ padding: 3px 6px; }}
+"""
+
+
+def use(colors: dict, look: str = None) -> None:
     """Makes colors the current theme for everything drawn from now on."""
+    if look in LOOKS:
+        globals()["LOOK"] = look
     globals().update(palette(colors))
     globals()["STYLE"] = _style()
 
@@ -223,9 +372,14 @@ def use(colors: dict) -> None:
 use(PRESETS[DEFAULT_THEME][2])
 
 
-def apply(app, colors: dict = None) -> None:
-    if colors is not None:
-        use(colors)
+def look_for(settings) -> str:
+    look = getattr(settings, "look", DEFAULT_LOOK)
+    return look if look in LOOKS else DEFAULT_LOOK
+
+
+def apply(app, colors: dict = None, look: str = None) -> None:
+    if colors is not None or look is not None:
+        use(colors if colors is not None else _current_colors(), look)
     app.setStyle("Fusion")
     pal = QPalette()
     pal.setColor(QPalette.Window, QColor(BG))

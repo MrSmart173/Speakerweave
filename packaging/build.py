@@ -247,7 +247,9 @@ def render_terms(app_dir: str) -> str:
 
     with open(os.path.join(HERE, "LICENSE_TEMPLATE.txt"), encoding="utf-8") as fh:
         text = fh.read()
-    text = text.replace("{PUBLISHER}", release.PUBLISHER).replace("{YEAR}", str(datetime.date.today().year))
+    text = (text.replace("{PUBLISHER}", release.PUBLISHER)
+            .replace("{YEAR}", str(datetime.date.today().year))
+            .replace("{WEBSITE}", release.WEBSITE or "the page you downloaded SpeakerWeave from"))
     path = os.path.join(app_dir, "LICENSE.txt")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)

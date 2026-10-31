@@ -7,10 +7,12 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QToolTip, QWidget
 
+from .. import furniture
 from ..model import (OFF, REAL_SPEAKERS, ROLE_ANGLES, ROLE_COLORS, ROLE_NAMES, ROLE_SHORT, can_move_alone, is_shape,
                      is_sub, face_listener, move_speaker, set_attached, shape_role, speaker_distance,
                      speaker_position)
 from . import theme
+from .furniture_paint import paint as paint_furniture
 
 PAD = 44          # pixels around the room
 R = 13.0          # speaker badge radius in pixels
@@ -41,11 +43,13 @@ class RoomMap(QWidget):
         self.levels: dict[str, float] = {}
         self.mic_levels: dict[str, float] = {}      # how loud each microphone hears, 0 to 1
         self.sel_mic = ""                           # the microphone clicked last
+        self.sel_furniture = ""                     # the desk or rig clicked last
+        self._seated = False                        # dragging a rig you sit in: you come along
         self.clipped: set[str] = set()
         self.test_role = ""
         self._drag = None           # (kind, device, speaker, offset x, offset y)
         self._hover = None          # (speaker id, "x" | "y" | "") under the mouse
-        self.setMinimumSize(440, 380)
+        self.setMinimumSize(320, 250)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
         for sig in (state.structureChanged, state.selectionChanged, state.layoutChanged):
@@ -154,7 +158,138 @@ class RoomMap(QWidget):
             pts.append((dev.x, dev.y))
             pts.extend(speaker_position(dev, spk) for spk in dev.speakers)
         pts.extend((mic.x, mic.y) for mic in proj.mics)
+        if self.furniture_on:
+            for piece in proj.furniture:
+                pts.extend(furniture.corners(piece))
         return pts
+
+    # ------------------------------------------------------------ desks and rigs
+    @property
+    def furniture_on(self) -> bool:
+        return bool(getattr(self.state.settings, "furniture_on", False))
+
+    def selected_furniture(self):
+        return next((f for f in self.state.project.furniture if f.id == self.sel_furniture), None)
+
+    def _seated_in(self, piece) -> bool:
+        """You sit in this rig (or at this desk): moving it brings you along."""
+        p = self.state.project
+        sx, sy = furniture.seat(piece)
+        return piece.is_rig and math.hypot(sx - p.listener_x, sy - p.listener_y) < 0.25
+
+    def add_furniture(self, kind: str):
+        p = self.state.project
+        piece = furniture.new(kind, p.listener_x, p.listener_y)
+        p.furniture.append(piece)
+        self.sel_furniture = piece.id
+        self.state.select("", "")
+        self.state.touch_layout()
+        self.update()
+        return piece
+
+    def remove_furniture(self, piece) -> None:
+        p = self.state.project
+        p.furniture = [f for f in p.furniture if f.id != piece.id]
+        if self.sel_furniture == piece.id:
+            self.sel_furniture = ""
+        self.state.touch_layout()
+        self.update()
+
+    def change_furniture(self, piece, **values) -> None:
+        """New values for a piece. A rig you sit in keeps you in its seat."""
+        seated = self._seated_in(piece)
+        for key, value in values.items():
+            setattr(piece, key, value)
+        furniture.clean(piece)
+        if seated:
+            p = self.state.project
+            p.listener_x, p.listener_y = (round(v, 3) for v in furniture.seat(piece))
+        self.state.touch_layout()
+        self.update()
+
+    def turn_furniture(self, piece, step: float) -> None:
+        """Turns a piece. A rig you sit in turns round you, so you stay where you are."""
+        p = self.state.project
+        if self._seated_in(piece):
+            sx, sy = furniture.seat(piece)
+            piece.rotation = ((piece.rotation + step + 180.0) % 360.0) - 180.0
+            nx, ny = furniture.seat(piece)
+            piece.x, piece.y = round(piece.x + sx - nx, 3), round(piece.y + sy - ny, 3)
+            p.listener_x, p.listener_y = round(sx, 3), round(sy, 3)
+        else:
+            piece.rotation = ((piece.rotation + step + 180.0) % 360.0) - 180.0
+        self.state.touch_layout()
+
+    def sit_in(self, piece) -> None:
+        p = self.state.project
+        p.listener_x, p.listener_y = (round(v, 3) for v in furniture.seat(piece))
+        self.state.touch_layout()
+
+    def edit_furniture(self, piece) -> None:
+        from .furniture_dialog import FurnitureDialog
+        FurnitureDialog(self, piece).exec()
+
+    def furniture_menu_at(self, pos: QPointF, hit="unset"):
+        """The right click menu of a desk or rig at pos, or the one that adds them on an
+        empty spot. None when neither applies."""
+        if hit == "unset":
+            hit = self._hit(pos)
+        if hit is not None and hit[0] == "furniture":
+            piece = hit[2]
+            self.sel_furniture = piece.id
+            self.update()
+            menu = QMenu(self)
+            self._furniture_menu(menu, piece)
+            return menu
+        if hit is None and self.furniture_on:
+            menu = QMenu(self)
+            self._add_menu(menu)
+            return menu
+        return None
+
+    def _add_menu(self, menu: QMenu) -> None:
+        desks = menu.addMenu("Add a desk")
+        for kind, name in furniture.DESKS.items():
+            desks.addAction(name, lambda k=kind: self.add_furniture(k))
+        rigs = menu.addMenu("Add a sim rig")
+        for kind, name in furniture.RIGS.items():
+            rigs.addAction(name, lambda k=kind: self.add_furniture(k))
+
+    def _furniture_menu(self, menu: QMenu, piece) -> None:
+        menu.addSection(piece.title)
+        if piece.kind == "racing":
+            shifter = menu.addAction("Shifter", lambda: self.change_furniture(piece, shifter=not piece.shifter))
+            shifter.setCheckable(True)
+            shifter.setChecked(piece.shifter)
+            for side in furniture.SIDES:
+                action = menu.addAction(f"Shifter and handbrake on the {side}",
+                                        lambda s=side: self.change_furniture(piece, shifter_side=s))
+                action.setCheckable(True)
+                action.setChecked(piece.shifter_side == side)
+            brake = menu.addAction("Handbrake",
+                                   lambda: self.change_furniture(piece, handbrake=not piece.handbrake))
+            brake.setCheckable(True)
+            brake.setChecked(piece.handbrake)
+            menu.addSeparator()
+        elif piece.kind == "flight":
+            for key, name in furniture.FLIGHT_CONTROLS.items():
+                action = menu.addAction(name, lambda k=key: self.change_furniture(piece, controls=k))
+                action.setCheckable(True)
+                action.setChecked(piece.controls == key)
+            menu.addSeparator()
+        elif piece.kind == "desk_corner":
+            other = "left" if piece.corner_side == "right" else "right"
+            menu.addAction(f"Corner on the {other}",
+                           lambda: self.change_furniture(piece, corner_side=other))
+        menu.addAction("Size and options...", lambda: self.edit_furniture(piece))
+        turn = menu.addMenu("Turn")
+        turn.addAction("15\u00b0 left", lambda: self.turn_furniture(piece, -15.0))
+        turn.addAction("15\u00b0 right", lambda: self.turn_furniture(piece, 15.0))
+        turn.addAction("Straight", lambda: self.turn_furniture(piece, -piece.rotation))
+        if piece.is_rig:
+            menu.addAction("Sit me in it", lambda: self.sit_in(piece))
+        menu.addSeparator()
+        menu.addAction("Remove from the map", lambda: self.remove_furniture(piece))
 
     def fit_zoom(self) -> float:
         """The closest zoom at which everything on the map still fits in view."""
@@ -332,6 +467,12 @@ class RoomMap(QWidget):
             lx, ly = self._local(dev, pos)
             if abs(lx) <= w / 2 + 3 and abs(ly) <= h / 2 + 5:
                 return ("device", dev, None)
+        if self.furniture_on:
+            mx, my = self.to_m(pos)
+            margin = 4.0 / max(1.0, self._geom()[0])
+            for piece in reversed(proj.furniture):
+                if furniture.contains(piece, mx, my, margin):
+                    return ("furniture", None, piece)
         return None
 
     # ------------------------------------------------------------ mouse
@@ -342,11 +483,23 @@ class RoomMap(QWidget):
         hit = self._hit(pos)
         if hit is None or hit[0] != "mic":
             self.sel_mic = ""
+        if hit is None or hit[0] != "furniture":
+            if self.sel_furniture:
+                self.sel_furniture = ""
+                self.update()
         if hit is None:
             self.state.select("", "")
             return
         kind, dev, spk = hit
         mx, my = self.to_m(pos)
+        if kind == "furniture":
+            self.state.select("", "")
+            self.sel_furniture = spk.id
+            self._seated = self._seated_in(spk)
+            self._drag = ("furniture", None, spk, mx - spk.x, my - spk.y)
+            self.setCursor(Qt.ClosedHandCursor)
+            self.update()
+            return
         if kind == "mic":
             self.state.select("", "")
             self.sel_mic = spk.id
@@ -408,6 +561,12 @@ class RoomMap(QWidget):
         elif kind == "mic":
             x, y = self._clamp(mx - ox, my - oy, snap)
             spk.x, spk.y = round(x, 3), round(y, 3)
+        elif kind == "furniture":
+            old_x, old_y = spk.x, spk.y
+            spk.x, spk.y = self._clamp(mx - ox, my - oy, snap)
+            if self._seated:
+                proj.listener_x = round(proj.listener_x + spk.x - old_x, 3)
+                proj.listener_y = round(proj.listener_y + spk.y - old_y, 3)
         elif kind == "speaker":
             x, y = self._clamp(mx - ox, my - oy, snap)
             move_speaker(dev, spk, x, y, proj.mirror)
@@ -460,6 +619,11 @@ class RoomMap(QWidget):
             tick.setChecked(mic.enabled)
             menu.addAction("Remove from the map", lambda: self.state.remove_mic(mic.id))
             menu.exec(ev.globalPos())
+            return
+        menu = self.furniture_menu_at(QPointF(ev.pos()), hit)
+        if menu is not None:
+            menu.exec(ev.globalPos())
+            menu.deleteLater()
             return
         if hit is None or hit[1] is None:
             return
@@ -539,16 +703,25 @@ class RoomMap(QWidget):
         if ev.key() == Qt.Key_0:
             self.set_zoom(1.0)
             return
+        piece = self.selected_furniture() if self.furniture_on else None
+        if piece is not None and ev.key() in (Qt.Key_Delete, Qt.Key_Backspace):
+            self.remove_furniture(piece)
+            return
         super().keyPressEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
         hit = self._hit(ev.position())
         if hit and hit[0] == "speaker":
             self.state.identify(hit[2].id)
+        elif hit and hit[0] == "furniture":
+            self.edit_furniture(hit[2])
 
     def wheelEvent(self, ev):
         """Over a unit: turns it. Anywhere else, or with Ctrl held: zooms."""
         hit = self._hit(ev.position())
+        if hit and hit[0] == "furniture" and not (ev.modifiers() & Qt.ControlModifier):
+            self.turn_furniture(hit[2], 5.0 if ev.angleDelta().y() > 0 else -5.0)
+            return
         turn = hit and hit[1] is not None and hit[1].kind == "builtin" \
             and not (ev.modifiers() & Qt.ControlModifier)
         if not turn:
@@ -573,6 +746,9 @@ class RoomMap(QWidget):
                 text = f"{hit[1].title}\nDrag to move, scroll to turn (Ctrl and scroll to zoom)"
             elif hit and hit[0] == "listener":
                 text = "You (the listening position)"
+            elif hit and hit[0] == "furniture":
+                text = (f"{hit[2].title}\nDrag to move, scroll to turn, double click for its size "
+                        f"and options. Right click for more.")
             elif hit and hit[0] == "turn":
                 text = "Drag to turn"
             elif hit and hit[0] == "edge_x":
@@ -606,6 +782,9 @@ class RoomMap(QWidget):
         bold = QFont(small)
         bold.setBold(True)
 
+        if self.furniture_on:
+            for piece in proj.furniture:
+                paint_furniture(p, piece, s, self.to_px(piece.x, piece.y), piece.id == self.sel_furniture)
         for dev in proj.devices:
             self._paint_device(p, dev, small)
         sel_dev, sel_spk = self.state.selected_speaker()
@@ -626,10 +805,13 @@ class RoomMap(QWidget):
         p.setFont(small)
         p.setPen(QColor(theme.DIM))
         room_for = self.width() - 20
-        for hint in ("Drag to place things.  Drag a speaker's rim to move only it.  "
-                     "Right click a speaker to hear it.",
-                     "Drag to place.  Drag a rim to move one speaker.  Right click to hear it.",
-                     "Drag to place.  Right click to hear it."):
+        hints = ("Drag to place things.  Drag a speaker's rim to move only it.  "
+                 "Right click a speaker to hear it.",
+                 "Drag to place.  Drag a rim to move one speaker.  Right click to hear it.",
+                 "Drag to place.  Right click to hear it.")
+        if self.furniture_on and not proj.furniture:
+            hints = ("Right click an empty spot to add a desk or a sim rig.",) + hints[1:]
+        for hint in hints:
             if p.fontMetrics().horizontalAdvance(hint) <= room_for:
                 break                                # the longest hint that fits the width
         p.drawText(QRectF(10, self.height() - 24, room_for, 18), Qt.AlignCenter, hint)

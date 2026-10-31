@@ -106,6 +106,7 @@ class AppState(QObject):
     sweepChanged = Signal()         # a speaker sweep started or ended
     windowsVolumeChanged = Signal()  # the Windows volume of the device listened to changed
     funChanged = Signal()           # a sound effect for fun was switched on or off, or changed
+    toneChanged = Signal()          # the tone generator started or stopped
 
     def __init__(self, profile_path: str = ""):
         super().__init__()
@@ -140,6 +141,9 @@ class AppState(QObject):
         self._sweep_timer = QTimer(self)
         self._sweep_timer.setInterval(200)
         self._sweep_timer.timeout.connect(self._watch_sweep)
+        self._tone_timer = QTimer(self)             # notices a tone that played to its end
+        self._tone_timer.setInterval(150)
+        self._tone_timer.timeout.connect(self._watch_tone)
         self.saving_blocked = False         # SpeakerWeave's own data was just removed: write nothing
         self.last_errors: list = []         # problems from the last start, for the Errors page
         self._save_timer = QTimer(self)
@@ -399,7 +403,8 @@ class AppState(QObject):
 
     def _end_temporary_run(self) -> None:
         if self._temporary_run and self.runner.running and not self.engine.identifying \
-                and not self.engine.metronome_on and not self.engine.sweeping:
+                and not self.engine.metronome_on and not self.engine.sweeping \
+                and not self.engine.tone_on:
             self._temporary_run = False
             self.stop()
 
@@ -487,6 +492,8 @@ class AppState(QObject):
             return False
         if self.engine.metronome_on:
             self.stop_metronome()
+        if self.engine.tone_on:
+            self.stop_tone()
         if not self.runner.running:
             self.start(temporary=True)
             if not self.runner.running:
@@ -517,7 +524,9 @@ class AppState(QObject):
         """Steady clicks on the speakers instead of the PC sound, to hear whether they
         are in time with each other. Starts the sound for it when it is stopped."""
         s = self.settings
-        if self.engine.sweeping:                    # one test at a time
+        if self.engine.tone_on:                     # one test at a time
+            self.stop_tone()
+        if self.engine.sweeping:
             self.engine.stop_sweep()
             self._sweep_timer.stop()
             self.sweep_kind = ""
@@ -569,6 +578,73 @@ class AppState(QObject):
             self.settings.test_boost_db = db
             self.save_settings()
         self.engine.test_gain = 10.0 ** (db / 20.0)
+
+    # ------------------------------------------------------------ tone generator
+    def tone_targets(self, where: str) -> list:
+        """The speakers a tone plays on: "all" every speaker that plays, "selected" the
+        selected speaker, or one speaker by its id."""
+        if where == "all":
+            return self.playing_speakers()
+        spk_id = self.sel_spk if where == "selected" else where
+        if not spk_id:
+            return []
+        _dev, spk = self.project.find_speaker(spk_id)
+        return [spk.id] if spk is not None else []
+
+    @property
+    def tone_playing(self) -> bool:
+        return self.engine.tone_on
+
+    def play_tone(self, spec=None, where: str = "") -> bool:
+        """Plays the tone generator's tone (spec, see tones.py) instead of the PC sound.
+        Starts the sound for it when it is stopped."""
+        from .. import tones
+        s = self.settings
+        if spec is not None:
+            s.tone = tones.clean(spec)
+        if where:
+            s.tone_target = where
+        ids = self.tone_targets(s.tone_target)
+        if not ids:
+            self.notice.emit("Select a speaker on the map first." if s.tone_target == "selected"
+                             else "No speaker plays: tick an output and give its speakers a role first.")
+            return False
+        if self.engine.metronome_on:                # one test at a time
+            self.stop_metronome()
+        if self.engine.sweeping:
+            self.stop_sweep()
+        if not self.runner.running:
+            self.start(temporary=True)
+            if not self.runner.running:
+                return False
+        self.engine.set_tone(tones.ToneGenerator(s.tone, self.engine.sr), ids)
+        self._tone_timer.start()
+        self.save_settings()
+        count = len(ids)
+        self.notice.emit(f"Playing {tones.describe(s.tone)} on "
+                         + (f"{count} speakers" if count != 1 else "1 speaker"))
+        self.toneChanged.emit()
+        return True
+
+    def stop_tone(self) -> None:
+        self._tone_timer.stop()
+        self.engine.stop_tone()
+        self.toneChanged.emit()
+        self._end_temporary_run()
+
+    def _watch_tone(self) -> None:
+        if not self.engine.tone_on:
+            self.stop_tone()
+
+    def refresh_tone(self) -> None:
+        """Speakers or the selection changed while a tone plays: it follows them."""
+        tone = self.engine._tone
+        if tone is not None and not tone[0].finished:
+            ids = self.tone_targets(self.settings.tone_target)
+            if ids:
+                self.engine.set_tone(tone[0], ids)
+            else:
+                self.stop_tone()
 
     def stop_metronome(self) -> None:
         self._clicks_fixed = False

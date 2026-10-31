@@ -123,6 +123,10 @@ class Engine:
         self._metro_active: list = []      # clicks still sounding: (speaker id, start, samples)
         self._click_cache: dict = {}
         self.block_count = 0           # goes up with every processed block
+        # the tone generator (tones.py): (ToneGenerator, frozenset of speaker ids), replaced
+        # as a whole; the PC sound waits on every speaker while a tone plays
+        self._tone = None
+        self.tones_done = 0            # goes up when a tone with an end has played to it
         # sound effects for fun (fun.py): {effect key: amount}, replaced as a whole
         self._fun: dict = {}
         self.fun_chain = FunChain()
@@ -455,6 +459,20 @@ class Engine:
         self._metro_clock = end
         return out
 
+    # ---------------------------------------------------------- tone generator
+    def set_tone(self, generator, targets) -> None:
+        """Plays a tone from the tone generator on the speakers in targets (ids) instead of
+        the PC sound. None stops it."""
+        self._tone = None if generator is None else (generator, frozenset(str(t) for t in targets))
+
+    def stop_tone(self) -> None:
+        self._tone = None
+
+    @property
+    def tone_on(self) -> bool:
+        tone = self._tone
+        return tone is not None and not tone[0].finished
+
     # ---------------------------------------------------------- sound effects for fun
     def set_fun(self, active: dict) -> None:
         """{effect key: amount} of the effects that should play now (see fun.py)."""
@@ -574,6 +592,14 @@ class Engine:
         roam = self._roam
         if roam[0] and roam[1] and roam[2] != self.sweep_done:
             clicks = self._sweep(n, roam)                   # the PC sound waits meanwhile
+        tone = self._tone
+        if tone is not None and clicks is None:
+            generator, ids = tone
+            wave = generator.render(n)
+            clicks = {spk_id: wave for spk_id in ids}       # the PC sound waits meanwhile
+            if generator.finished and self._tone is tone:
+                self._tone = None
+                self.tones_done += 1
         if test_gain != 1.0:
             if noise is not None:
                 noise = noise * test_gain

@@ -1,49 +1,120 @@
-SPEAKERWEAVE LICENCE TERMS
+SPEAKERWEAVE END USER LICENCE AGREEMENT
 
 Copyright (c) {YEAR} {PUBLISHER}. All rights reserved.
 
-By installing or using SpeakerWeave (the "software") you agree to these terms. If you
-do not agree, do not install or use the software.
+These terms are an agreement between you and {PUBLISHER} ("we", "us"). By installing,
+copying or using SpeakerWeave (the "software"), you agree to them. If you do not agree,
+do not install or use the software.
 
-1. Licence
-{PUBLISHER} gives you a personal, non-exclusive, non-transferable licence to install
-and use the software on computers that you own or control.
+1. The software is licensed, not sold
+   a. You do not buy or own the software, and you do not own any copy of it. You get a
+      licence to use it, on these terms, and nothing more.
+   b. We, and the authors of the components listed in section 7, keep every right, title
+      and interest in the software, including its code, design, look, sounds, text, names
+      and logos, and all copyright and other intellectual property in them.
+   c. Paying for a licence key buys a licence to use paid features. It does not buy the
+      software, a copy of it, or any part of it.
+   d. Any right not expressly given to you in these terms is kept by us.
 
-2. What you may not do
-You may not, without written permission from {PUBLISHER}:
-  a. sell, rent, lend, share, publish, upload or otherwise distribute the software or
-     its installer, in whole or in part, including on other websites or file sharing
-     services;
-  b. modify, decompile, disassemble or reverse engineer the software, except to the
-     extent that the law allows this despite this restriction;
-  c. remove or change any copyright or licence notice in the software.
+2. Your licence
+   We give you a personal, nonexclusive, nontransferable and revocable licence to install
+   and use the software on computers you own or control, for your own use.
 
-3. Components from other authors
-The software includes components made by other authors. They are provided under their
-own licences, which are listed in the "licenses" folder inside the installation folder.
-Those licences apply to those components, and nothing in these terms limits the rights
-they give you. VB-CABLE, if installed, is a product of VB-Audio Software and is
-donationware.
+3. The free version and the paid upgrade
+   a. Some features of the software are free. Others need a licence key, which you get
+      by paying for the upgrade.
+   b. One licence key may be used by one person, on one computer. It may not be used on
+      a second computer at the same time. If you replace your computer, contact us (see
+      section 14) and we can move your key to the new one.
+   c. Your licence key is personal. You may not share, publish, sell, give away or lend
+      it, or let anyone else use it.
+   d. We may switch off a licence key that has been shared, published, sold, generated
+      without us, or used against these terms.
+   e. The paid features are those described when you buy. Later versions of the software
+      may add, change or remove features, free or paid. We are not obliged to provide
+      updates, but when we do, these terms apply to them.
 
-4. Updates
-The software can check the internet for a newer version of itself. When it does, it
-only asks for the newest version number and its download, and sends no personal
-information about you. You can switch this off in the software's settings.
+4. Payment and refunds
+   a. The price is shown when you buy. A payment company may handle the sale, and its
+      own terms may also apply to the payment.
+   b. We do not give refunds if you simply change your mind.
+   c. Our goods come with guarantees that cannot be excluded under the Australian
+      Consumer Law. You are entitled to a replacement or refund for a major failure, and
+      compensation for any other reasonably foreseeable loss or damage. Nothing in these
+      terms takes away any right you have under the Australian Consumer Law or any other
+      law that cannot be excluded.
 
-5. No warranty
-To the extent permitted by law, the software is provided "as is", without warranty of
-any kind. Nothing in these terms excludes, restricts or modifies any right or remedy,
-or any guarantee, warranty or other term or condition, implied or imposed by the
-Australian Consumer Law or any other law that cannot lawfully be excluded or limited.
+5. What you may not do
+   You may not, without written permission from us:
+   a. sell, rent, lend, share, publish, upload or otherwise distribute the software, its
+      installer or a licence key, in whole or in part, including on other websites or
+      file sharing services;
+   b. modify, decompile, disassemble or reverse engineer the software, except to the
+      extent that the law allows this despite this restriction;
+   c. remove, get around, disable or interfere with licence keys, licence checks or any
+      other way the software protects its paid features, or make or share anything that
+      does;
+   d. remove or change any copyright, trademark or licence notice in the software.
 
-6. Limitation of liability
-To the extent permitted by law, {PUBLISHER} is not liable for any loss or damage
-arising from the use of, or the inability to use, the software, including damage to
-hearing or equipment from sound played at high volume.
+6. You use the software at your own risk
+   a. The software sends sound to your speakers, subwoofers, amplifiers, bass shakers,
+      headphones and other equipment, at the volumes and settings you choose. That
+      includes test sounds, sweeps, tones from 1 Hz to 20,000 Hz, beeps, patterns, bass
+      boost, distortion and other effects.
+   b. Loud sound, very low or very high tones, sudden sounds and long tones can damage
+      speakers, subwoofers, amplifiers and other equipment, and can damage hearing.
+   c. You are responsible for the volumes and settings you choose, for knowing what your
+      equipment can safely play, and for how you use the software. Start quietly, and turn
+      the sound up slowly.
+   d. You use the software entirely at your own risk.
 
-7. Ending these terms
-These terms end automatically if you break them. You must then stop using the software
-and uninstall it.
+7. Components from other authors
+   The software includes components made by other authors. They are provided under their
+   own licences, which are listed in the "licenses" folder inside the installation folder.
+   Those licences apply to those components, and nothing in these terms limits the rights
+   they give you. VB-CABLE, if installed, is a product of VB-Audio Software and is
+   donationware.
 
-8. Law
-These terms are governed by the laws of Queensland, Australia.
+8. Updates and the internet
+   The software can check the internet for a newer version of itself. When it does, it
+   only asks for the newest version number and its download, and sends no personal
+   information about you. You can switch this off in the software's settings. Checking a
+   licence key happens on your computer and sends nothing.
+
+9. No warranty
+   To the extent permitted by law, the software is provided "as is" and "as available",
+   without warranty of any kind, whether express or implied. We do not promise that it
+   will work without errors or interruptions, that it will suit your equipment or needs,
+   or that it will keep sound in time on every device.
+
+10. Limitation of liability
+   a. To the extent permitted by law, we are not liable for any loss or damage of any kind
+      arising from the use of, or the inability to use, the software, including:
+        damage to speakers, subwoofers, amplifiers, bass shakers, headphones, sound cards,
+        computers or any other equipment;
+        damage to hearing;
+        loss of data, time, income or enjoyment; and
+        any indirect or consequential loss.
+   b. Where the law does not allow our liability to be excluded but allows it to be
+      limited, our liability is limited, at our choice, to supplying the software again or
+      refunding what you paid for your licence.
+
+11. Ending these terms
+   These terms end automatically if you break them. Your licence, and any licence key you
+   hold, then ends. You must stop using the software and uninstall it.
+
+12. Changes to these terms
+   A new version of the software may come with new terms. If it does, those terms apply to
+   that version once you install it.
+
+13. The whole agreement
+   These terms are the whole agreement between you and us about the software. If any part
+   of them cannot be enforced, the rest still applies.
+
+14. Contact
+   To contact us, including about your licence key, use the SpeakerWeave page:
+   {WEBSITE}
+
+15. Law
+   These terms are governed by the laws of Queensland, Australia, and you and we submit to
+   the courts of Queensland.

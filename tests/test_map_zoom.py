@@ -136,7 +136,9 @@ def test_the_map_fits_itself_to_any_window_size_and_scrolls_when_too_small():
         m = win.map
         p = state.project
         sizes = []
-        for w, h in ((1700, 1000), (1400, 860), (1100, 700), (900, 560)):
+        bars = win.workspaces.panel("room").scroll.verticalScrollBar(), \
+            win.workspaces.panel("room").scroll.horizontalScrollBar()
+        for w, h in ((1700, 1000), (1400, 860), (1100, 700)):
             win.resize(w, h)
             pump(app, 0.1)
             assert p.map_auto
@@ -145,13 +147,18 @@ def test_the_map_fits_itself_to_any_window_size_and_scrolls_when_too_small():
                 assert 0 < pt.x() < m.width() and 0 < pt.y() < m.height(), (w, h)
             s, _cx, _cy = m._geom()
             sizes.append(s)
+            assert not any(bar.isVisible() for bar in bars), (w, h)
         assert sizes[0] > sizes[-1]                                           # a bigger window, a bigger map
         # 45 cm never shrinks to a crowd of badges: at least about 100 pixels from you
         assert all(0.45 * s > 100 for s in sizes)
-        # too small for everything: scroll bars instead of squashing
-        bars = win.scroller.horizontalScrollBar(), win.scroller.verticalScrollBar()
-        assert all(bar.isVisible() for bar in bars)
-        assert win.scroller.widget().width() >= win.scroller.widget().minimumSizeHint().width() - 4
+        # too small for everything: the map keeps its size and its panel scrolls, and no
+        # panel reaches past the window
+        win.resize(900, 560)
+        pump(app, 0.1)
+        assert m.height() >= m.minimumHeight() and any(bar.isVisible() for bar in bars)
+        for key, panel in win.workspaces.panels.items():
+            if win.workspaces.in_front(key) and not panel.isFloating():
+                assert win.dock_host.rect().adjusted(-2, -2, 2, 2).contains(panel.geometry()), key
         win.resize(1700, 1000)
         pump(app, 0.1)
         assert not any(bar.isVisible() for bar in bars)

@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 
+from .furniture import Furniture, clean as clean_furniture
+
 # ---------------------------------------------------------------- roles / modes
 
 OFF = "OFF"
@@ -344,6 +346,7 @@ class Project:
     devices: list[Device] = field(default_factory=list)
     extra_sources: list[ExtraSource] = field(default_factory=list)
     mics: list[Mic] = field(default_factory=list)       # microphones placed on the map
+    furniture: list[Furniture] = field(default_factory=list)   # desks and sim rigs on the map
     setup_version: int = 3      # 2: the safety buffer defaults to 0 ms. 3: full volume to start
 
     # ---- lookups
@@ -658,6 +661,8 @@ def _project_from_dict(data: dict) -> Project:
         sources.append(_build(ExtraSource, src))
     data["extra_sources"] = sources
     data["mics"] = [_build(Mic, m) for m in data.get("mics", []) or [] if isinstance(m, dict)]
+    data["furniture"] = [clean_furniture(_build(Furniture, f))
+                         for f in data.get("furniture", []) or [] if isinstance(f, dict)]
     proj = _build(Project, data)
     custom = [r for r in POSITION_ORDER if r in (proj.custom_roles or [])]
     proj.custom_roles = custom if any(not is_sub(r) for r in custom) else ["FL", "FR"]

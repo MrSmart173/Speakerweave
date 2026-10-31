@@ -187,7 +187,7 @@ def test_new_pages_and_actions():
     assert state.settings.show_meters is False
     sp.close_tray.setChecked(False)
     win.show_page(0)
-    assert win.nav.checkedId() == 0
+    assert win.pages.currentIndex() == 0 and win.workspaces.in_front("room")
 
     # a test sound starts the sound on its own and stops it again, even with a silent source
     proj.input_kind, proj.input_name = "device", "Mixer"

@@ -172,9 +172,10 @@ def selftest(report_path: str) -> int:
                                           "not included (SimHub is not on the PC that built this)"))
         # every colour theme builds and paints
         for key in theme.PRESETS:
-            theme.apply(app, theme.PRESETS[key][2])
-            window.grab()
-        theme.apply(app, theme.PRESETS[theme.DEFAULT_THEME][2])
+            for look in theme.LOOKS:
+                theme.apply(app, theme.PRESETS[key][2], look)
+                window.grab()
+        theme.apply(app, theme.PRESETS[theme.DEFAULT_THEME][2], theme.DEFAULT_LOOK)
         lines.append(f"colour themes: {len(theme.PRESETS)} presets painted")
         code = max(code, _selftest_windows(lines))
         lines.insert(0, "ok" if code == 0 else "FAILED")
@@ -194,6 +195,36 @@ def selftest(report_path: str) -> int:
         except Exception:
             pass
     return code
+
+
+def apply_ui_scale() -> float:
+    """Sets the interface size chosen in Settings before Qt starts (Qt reads it only then).
+    It multiplies Windows' own display scaling, which Qt follows by itself, screen by
+    screen, also at 125% or 150%. Returns the factor used."""
+    from PySide6.QtCore import QCoreApplication, Qt
+    from PySide6.QtGui import QGuiApplication
+    QCoreApplication.setApplicationName("SpeakerWeave")
+    # fractional Windows scaling (125%, 150%, 175%) exactly, not rounded to whole steps
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    from .settings import AppSettings
+    from .ui.state import config_dir
+    try:
+        scale = AppSettings.load(os.path.join(config_dir(), "settings.json")).ui_scale / 100.0
+    except Exception:
+        scale = 1.0
+    if abs(scale - 1.0) > 1e-6:
+        os.environ["QT_SCALE_FACTOR"] = f"{scale:g}"
+    else:
+        os.environ.pop("QT_SCALE_FACTOR", None)
+    return scale
+
+
+def restart_command() -> tuple:
+    """(program, arguments) that start this copy of SpeakerWeave again."""
+    if getattr(sys, "frozen", False):
+        return sys.executable, []
+    return sys.executable, ["-m", "speakerweave"]
 
 
 def main(argv=None) -> int:
@@ -230,6 +261,7 @@ def main(argv=None) -> int:
     from . import uninstall
     uninstall.hold_running_mutex()      # the uninstaller waits until this copy has closed
 
+    apply_ui_scale()
     app = QApplication(sys.argv[:1])
     app.setApplicationName("SpeakerWeave")
     app.setWindowIcon(theme.app_icon())
@@ -237,7 +269,7 @@ def main(argv=None) -> int:
     _install_error_log(config_dir())
     uninstall.mark_data_for_removal(config_dir(), False)   # an uninstall was cancelled: keep the data
     state = AppState(args.setup)
-    theme.apply(app, theme.colors_for(state.settings))
+    theme.apply(app, theme.colors_for(state.settings), theme.look_for(state.settings))
     window = MainWindow(state)
     hidden = (args.tray or state.settings.start_in_tray) and window.tray is not None
     if not hidden:

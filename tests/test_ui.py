@@ -234,7 +234,7 @@ def test_whole_window():
     # roles from positions, delays from distances
     win.assign_btn.click()
     assert spk.role in ("BL", "SL"), spk.role
-    win.align_btn.click()
+    win.align_action.trigger()
     assert max(s.delay_ms for _, s in proj.all_speakers()) > 0
 
     # run with the pretend sound cards, test signal first, then the mixer input

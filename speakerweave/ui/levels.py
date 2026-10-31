@@ -50,7 +50,7 @@ class MeterBlock(QWidget):
         self._peak_time: list = []
         self.step = BAR_W + GAP             # from one bar to the next, wide enough for its label
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(146)
 
     def set_channels(self, labels: list) -> None:
         if [t for t, _ in labels] != [t for t, _ in self.labels]:
@@ -173,7 +173,7 @@ class LevelsBar(QScrollArea):
         self.setFrameShape(QFrame.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setFixedHeight(196)
+        self.setFixedHeight(164)
         inner = QWidget()
         self.row = QHBoxLayout(inner)
         self.row.setContentsMargins(0, 4, 0, 4)
