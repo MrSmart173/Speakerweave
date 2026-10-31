@@ -439,6 +439,8 @@ your own test sounds, update checks and the About section.
 The Windows volume works as you would expect: the volume keys of a keyboard, the volume
 wheel of a mouse or headset and the Windows volume slider turn your speakers up and down,
 and muting Windows mutes them. **Follow the Windows volume and mute** switches this off.
+SpeakerWeave's own volume slider starts at 0 dB every time it opens, whatever it was left at.
+Untick **Start at 0 dB every time SpeakerWeave opens** to have it remember instead.
 
 **Make SpeakerWeave the main sound output of Windows** is on from the start. While the sound
 plays, Windows plays into the device SpeakerWeave listens to (SpeakerWeave Virtual Speaker

@@ -42,6 +42,7 @@ class AppSettings:
     auto_surround: bool = True          # set the virtual device to 7.1 so games send surround
     name_virtual_device: bool = True    # call VB-CABLE's output "SpeakerWeave Virtual Speaker output"
     follow_windows_volume: bool = True  # the Windows volume (keys, mouse wheel) sets the speakers' too
+    volume_at_start_0: bool = True      # SpeakerWeave's volume starts at 0 dB every time it opens
     show_levels: bool = True            # the level meters under the room map
     show_now_playing: bool = True       # what is playing on the PC, under the room map
     media_popup: bool = True            # a popup in the corner when a new song or video starts

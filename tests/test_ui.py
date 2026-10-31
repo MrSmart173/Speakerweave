@@ -317,6 +317,8 @@ def test_whole_window():
     # the setup survives a restart
     state.save_now()
     again = AppState("")
+    assert again.project.master_db == 0.0                 # the volume starts at 0 dB every time
+    again.project.master_db = proj.master_db              # everything else is as it was
     assert again.project.to_json() == proj.to_json()
     win.close()
 

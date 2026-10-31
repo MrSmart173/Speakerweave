@@ -113,6 +113,8 @@ class AppState(QObject):
         self.settings_path = os.path.join(config_dir(), "settings.json")
         self.settings = AppSettings.load(self.settings_path)
         self.project = self._load_initial(profile_path)
+        if self.settings.volume_at_start_0:
+            self.project.master_db = 0.0        # 0 dB every time it opens, whatever it was left at
         hidden.pull_hidden(self.settings, self.project)     # outputs hidden on this PC
         self._fix_layouts(self.project)
         self.engine = Engine(self.project)

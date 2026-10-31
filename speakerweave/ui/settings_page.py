@@ -104,6 +104,10 @@ class SettingsPage(QWidget):
                                       "sets how loud your speakers play, on top of SpeakerWeave's own "
                                       "volume. Switch it off if a volume change is heard twice.")
         v.addWidget(self.follow_volume)
+        self.volume_at_start = QCheckBox("Start at 0 dB every time SpeakerWeave opens")
+        self.volume_at_start.setToolTip("The volume slider at the top goes back to 0 dB each time "
+                                        "SpeakerWeave opens. Off: it stays where you left it.")
+        v.addWidget(self.volume_at_start)
         self.output_state = dim("")
         v.addWidget(self.output_state)
         row = QHBoxLayout()
@@ -224,6 +228,7 @@ class SettingsPage(QWidget):
         self.auto_surround.toggled.connect(lambda v: self._set("auto_surround", v))
         self.name_cable.toggled.connect(self._name_cable_toggled)
         self.follow_volume.toggled.connect(self._follow_volume_toggled)
+        self.volume_at_start.toggled.connect(lambda v: self._set("volume_at_start_0", v))
         self.output_now.clicked.connect(lambda: self._make_default(show=True))
         self.boot_btn.clicked.connect(lambda: self.start_windows.setChecked(True))
         self.load()
@@ -461,6 +466,7 @@ class SettingsPage(QWidget):
         self.name_cable.setChecked(s.name_virtual_device)
         self.name_cable.setEnabled(windefault.supported())
         self.follow_volume.setChecked(s.follow_windows_volume)
+        self.volume_at_start.setChecked(s.volume_at_start_0)
         self.auto_surround.setEnabled(s.default_output)
         self.restore_output.setEnabled(s.default_output)
         self.output_now.setEnabled(s.default_output and windefault.supported())

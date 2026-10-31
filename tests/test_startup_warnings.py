@@ -143,3 +143,20 @@ def test_setups_at_the_old_starting_volume_move_to_full_volume(tmp_path):
     assert again.setup_version == 3
     again.master_db = -6.0                                     # set by hand after the update
     assert Project.from_json(again.to_json()).master_db == -6.0
+
+
+def test_the_volume_starts_at_0_db_every_time(tmp_path, monkeypatch):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from speakerweave.settings import AppSettings
+    from speakerweave.ui import state as state_module
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr(state_module, "config_dir", lambda: str(tmp_path))
+    left = Project(master_db=12.0)                            # left at +12 dB last time
+    left.save(str(tmp_path / "last setup.json"))
+    state = state_module.AppState("")
+    assert state.project.master_db == 0.0
+    settings = AppSettings()
+    settings.volume_at_start_0 = False                        # remember it instead
+    settings.save(str(tmp_path / "settings.json"))
+    assert state_module.AppState("").project.master_db == 12.0
